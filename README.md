@@ -71,6 +71,25 @@ temp = 0.7
 2. Add section to `config.ini`
 3. Restart: `docker compose restart`
 
+## Model Management CLI
+
+```bash
+# List available + loaded models
+./models.sh list
+
+# Load a model
+./models.sh load qwen3-4b
+
+# Unload a model
+./models.sh unload qwen3-4b
+
+# Unload all models
+./models.sh unload all
+
+# Server health + loaded models
+./models.sh status
+```
+
 ## VRAM Management
 
 | Action | Command |
