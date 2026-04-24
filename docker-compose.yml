@@ -1,0 +1,29 @@
+services:
+  llama-router:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    container_name: llama-router
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+      - ./config.ini:/app/config.ini:ro
+    command: >
+      --host 0.0.0.0
+      --port 8080
+      --models-dir /models
+      --models-max 5
+      --models-preset /app/config.ini
+      --parallel 4
+      --cont-batching
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    mem_limit: 12g
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+# Model files (large, download separately)
+models/*.gguf
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
