@@ -90,6 +90,13 @@ temp = 0.7
 ./models.sh status
 ```
 
+## Remove Model
+
+```bash
+# Remove model (delete file + config + restart)
+./remove-model.sh qwen3-4b
+```
+
 ## VRAM Management
 
 | Action | Command |
