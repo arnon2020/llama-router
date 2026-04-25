@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 
-HOST="http://localhost:8080"
+HOST="http://localhost:8581"
 model="$1"
 
 if [ -z "$model" ]; then

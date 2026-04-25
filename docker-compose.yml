@@ -3,18 +3,37 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
     container_name: llama-router
     ports:
-      - "8080:8080"
+      - "${LLAMA_API_PORT:-8581}:8080"
     volumes:
       - ./models:/models
       - ./config.ini:/app/config.ini:ro
     command: >
+      -s
       --host 0.0.0.0
       --port 8080
       --models-dir /models
-      --models-max 5
+      --models-max ${MODELS_MAX:-5}
       --models-preset /app/config.ini
-      --parallel 4
+      --parallel ${PARALLEL_REQUESTS:-4}
       --cont-batching
+      --jinja
+      --flash-attn on
+      -ctk ${CTK:-q4_0}
+      -ctv ${CTV:-q4_0}
+      -t ${THREADS:-16}
+      --min-p ${MIN_P:-0.05}
+      --reasoning off
+      --no-mmap
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     deploy:
       resources:
         reservations:
@@ -23,7 +42,37 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    mem_limit: 12g
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    mem_limit: ${LLAMA_ROUTER_MEM_LIMIT:-12g}
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    container_name: llama-router-web
+    ports:
+      - "${WEB_UI_PORT:-8580}:3000"
+    volumes:
+      - ./config.ini:/config/config.ini
+      - ./models:/models
+      # SECURITY WARNING: Mounting Docker socket gives container full control over host Docker.
+      # Only mount if absolutely necessary. Consider using Docker API proxy with restricted permissions.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LLAMA_HOST=http://llama-router:8080
+      - CONFIG_PATH=/config/config.ini
+      - MODELS_DIR=/models
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    depends_on:
+      llama-router:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped

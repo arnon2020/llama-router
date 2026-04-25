@@ -4,7 +4,7 @@
 #   No args = unload ALL loaded models
 #   With model name = unload specific model
 
-HOST="http://localhost:8080"
+HOST="http://localhost:8581"
 
 if [ -n "$1" ]; then
   echo "Unloading: $1"

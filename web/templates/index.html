@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>llama-router</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3d3d3d;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #3d3d3d;
+            border-radius: 20px;
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+        }
+
+        .status.online .status-dot {
+            background: #4ade80;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+        }
+
+        .status.offline .status-dot {
+            background: #f87171;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #3d3d3d;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 1rem;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #e0e0e0;
+        }
+
+        .tab.active {
+            color: #60a5fa;
+            border-bottom-color: #60a5fa;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #60a5fa;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid #3d3d3d;
+        }
+
+        th {
+            font-weight: 600;
+            color: #888;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        tr:hover {
+            background: #3d3d3d;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge.loaded {
+            background: #166534;
+            color: #86efac;
+        }
+
+        .badge.unloaded {
+            background: #444;
+            color: #a3a3a3;
+        }
+
+        .badge.loading {
+            background: #b45309;
+            color: #fcd34d;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .badge.error {
+            background: #991b1b;
+            color: #fca5a5;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .badge.new {
+            background: #f59e0b;
+            color: #1a1a1a;
+            animation: pulse-new 2s infinite;
+        }
+
+        @keyframes pulse-new {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #555;
+        }
+
+        .btn-load {
+            background: #16a34a;
+            color: white;
+        }
+
+        .btn-load:hover:not(:disabled) {
+            background: #15803d;
+        }
+
+        .btn-unload {
+            background: #ca8a04;
+            color: white;
+        }
+
+        .btn-unload:hover:not(:disabled) {
+            background: #a16207;
+        }
+
+        .btn-remove {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-remove:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+            padding: 0.75rem 1.5rem;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #2563eb;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #888;
+            font-size: 0.875rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem;
+            background: #3d3d3d;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 0.875rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #60a5fa;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+
+        .alert.error {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        .alert.success {
+            background: #14532d;
+            color: #86efac;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .config-section {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #3d3d3d;
+            border-radius: 4px;
+        }
+
+        .config-section h3 {
+            font-size: 1rem;
+            margin-bottom: 0.75rem;
+            color: #e0e0e0;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #888;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #444;
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: #3d3d3d;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 3px solid #60a5fa;
+        }
+
+        .metric-card.success {
+            border-left-color: #4ade80;
+        }
+
+        .metric-card.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .metric-card.error {
+            border-left-color: #ef4444;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .metric-unit {
+            font-size: 0.875rem;
+            color: #888;
+            font-weight: 400;
+        }
+
+        .gpu-card {
+            background: #3d3d3d;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .gpu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .gpu-name {
+            font-weight: 600;
+            color: #60a5fa;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #2d2d2d;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #f59e0b, #ef4444);
+            transition: width 0.3s;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #16a34a;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease;
+            z-index: 1000;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.fadeOut {
+            animation: slideOut 0.3s ease forwards;
+        }
+
+        .toast.error {
+            background: #dc2626;
+        }
+
+        @keyframes slideOut {
+            to {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+        }
+
+        /* Modal for showing full URL */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .modal-close:hover {
+            color: #e0e0e0;
+        }
+
+        .modal-url-box {
+            background: #1a1a1a;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            padding: 1rem;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #60a5fa;
+            margin-bottom: 1rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            font-weight: 500;
+        }
+
+        .modal-btn-primary {
+            background: #60a5fa;
+            color: #1a1a1a;
+        }
+
+        .modal-btn-primary:hover {
+            background: #3b82f6;
+        }
+
+        .modal-btn-secondary {
+            background: #4d4d4d;
+            color: #e0e0e0;
+        }
+
+        .modal-btn-secondary:hover {
+            background: #5d5d5d;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Download Progress Modal */
+        .download-progress-container {
+            text-align: center;
+        }
+
+        .download-model-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #e0e0e0;
+            margin-bottom: 1rem;
+        }
+
+        .download-status {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar-container {
+            background: #1a1a1a;
+            border-radius: 8px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border-radius: 8px;
+            transition: width 0.3s ease;
+            min-width: 0;
+        }
+
+        .progress-bar-fill.validating {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        .progress-bar-fill.complete {
+            background: linear-gradient(90deg, #16a34a, #22c55e);
+        }
+
+        .progress-bar-fill.error {
+            background: linear-gradient(90deg, #dc2626, #ef4444);
+        }
+
+        .progress-text {
+            font-size: 0.85rem;
+            color: #e0e0e0;
+            margin-bottom: 0.25rem;
+        }
+
+        .progress-details {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .spinner-inline {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #3d3d3d;
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Download Badge */
+        .download-badge {
+            display: inline-block;
+            background: #dc2626;
+            color: white;
+            font-size: 0.65rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 10px;
+            margin-left: 0.25rem;
+            font-weight: 600;
+        }
+
+        /* Download Queue Items */
+        .download-item {
+            background: #2d2d2d;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #4d4d4d;
+        }
+
+        .download-item.downloading {
+            border-left-color: #3b82f6;
+            background: #1a1a2e;
+        }
+
+        .download-item.validating {
+            border-left-color: #f59e0b;
+        }
+
+        .download-item.complete {
+            border-left-color: #16a34a;
+        }
+
+        .download-item.error {
+            border-left-color: #dc2626;
+        }
+
+        .download-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .download-name {
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .download-status-badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .download-status-badge.downloading {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .download-status-badge.validating {
+            background: #f59e0b;
+            color: #1a1a1a;
+        }
+
+        .download-status-badge.complete {
+            background: #16a34a;
+            color: white;
+        }
+
+        .download-status-badge.error {
+            background: #dc2626;
+            color: white;
+        }
+
+        .download-progress-bar {
+            height: 6px;
+            background: #1a1a1a;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .download-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            transition: width 0.3s ease;
+        }
+
+        .download-progress-fill.complete {
+            background: #16a34a;
+        }
+
+        .download-progress-fill.error {
+            background: #dc2626;
+        }
+
+        .download-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .download-error {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(220, 38, 38, 0.2);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #fca5a5;
+        }
+
+        .empty-downloads {
+            text-align: center;
+            padding: 2rem;
+            color: #888;
+        }
+
+        /* Download History Section */
+        .download-history-section {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #333;
+        }
+
+        .download-history-header {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #888;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Download control buttons */
+        .download-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .download-btn {
+            padding: 0.35rem 0.75rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+        }
+
+        .download-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-pause {
+            background: #f59e0b;
+            color: #1a1a1a;
+        }
+
+        .btn-pause:hover:not(:disabled) {
+            background: #d97706;
+        }
+
+        .btn-resume {
+            background: #16a34a;
+            color: white;
+        }
+
+        .btn-resume:hover:not(:disabled) {
+            background: #15803d;
+        }
+
+        .btn-stop {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
+        .download-item.paused {
+            border-left-color: #f59e0b;
+            background: #2a2a1a;
+        }
+
+        .download-status-badge.paused {
+            background: #f59e0b;
+            color: #1a1a1a;
+        }
+
+        /* Category Tabs for Quick Models */
+        .category-tab {
+            padding: 0.5rem 1rem;
+            background: #3d3d3d;
+            border: 1px solid #4d4d4d;
+            border-radius: 20px;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .category-tab:hover {
+            background: #4d4d4d;
+            color: #e0e0e0;
+        }
+
+        .category-tab.active {
+            background: #60a5fa;
+            border-color: #60a5fa;
+            color: #1a1a1a;
+        }
+
+        /* Quick Models Grid */
+        .quick-models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .quick-model-card {
+            background: #3d3d3d;
+            border: 1px solid #4d4d4d;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .quick-model-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #60a5fa, #3b82f6);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .quick-model-card:hover {
+            background: #4d4d4d;
+            border-color: #60a5fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(96, 165, 250, 0.2);
+        }
+
+        .quick-model-card:hover::before {
+            opacity: 1;
+        }
+
+        .quick-model-card[data-size="small"]::before {
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+        }
+
+        .quick-model-card[data-size="medium"]::before {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        .quick-model-card[data-size="large"]::before {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+
+        .quick-model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.5rem;
+        }
+
+        .quick-model-name {
+            font-weight: 600;
+            color: #e0e0e0;
+            font-size: 1rem;
+        }
+
+        .quick-model-badge {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .quick-model-badge.small {
+            background: #166534;
+            color: #86efac;
+        }
+
+        .quick-model-badge.medium {
+            background: #92400e;
+            color: #fcd34d;
+        }
+
+        .quick-model-badge.large {
+            background: #991b1b;
+            color: #fca5a5;
+        }
+
+        .quick-model-filename {
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: #888;
+            word-break: break-all;
+            margin-bottom: 0.5rem;
+        }
+
+        .quick-model-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .quick-model-provider {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .quick-model-provider::before {
+            content: '🏢';
+        }
+
+        .quick-model-gated {
+            background: #7c2d12;
+            color: #fdba74;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .quick-model-gated::before {
+            content: '🔒';
+        }
+
+        .quick-model-download-hint {
+            color: #60a5fa;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .quick-model-download-hint::after {
+            content: '⬇';
+        }
+
+        /* Info box styling */
+        .info-box {
+            background: #1a1a2e;
+            border-left: 3px solid #60a5fa;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .info-box ul {
+            margin: 0.5rem 0 0 1.5rem;
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* URL preview */
+        #url-preview {
+            display: none;
+            background: #1a1a2e;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #60a5fa;
+            margin-top: 0.5rem;
+            font-family: monospace;
+        }
+
+        /* Details summary styling */
+        details summary {
+            cursor: pointer;
+            color: #60a5fa;
+            font-size: 1rem;
+            padding: 0.75rem;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        details summary::-webkit-details-marker {
+            display: none;
+        }
+
+        details summary::before {
+            content: '▶';
+            font-size: 0.7rem;
+            transition: transform 0.2s;
+        }
+
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        details[open] summary {
+            margin-bottom: 1rem;
+        }
+
+        /* Small tag in details */
+        details small {
+            color: #888;
+            font-size: 0.75rem;
+        }
+
+        details a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        details a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>llama-router</h1>
+        <div class="status" id="status">
+            <div class="status-dot"></div>
+            <span id="status-text">Checking...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" data-tab="models">Models</button>
+            <button class="tab" data-tab="downloads">
+                Downloads
+                <span class="download-badge" id="download-badge" style="display: none;">0</span>
+            </button>
+            <button class="tab" data-tab="metrics">Metrics</button>
+            <button class="tab" data-tab="config">Config</button>
+            <button class="tab" data-tab="add">Add Model</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Downloads Tab -->
+        <div class="tab-content" id="tab-downloads">
+            <div class="card">
+                <h2>Download Queue</h2>
+                <div id="downloads-container">
+                    <div class="empty-state">Loading downloads...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Tab -->
+        <div class="tab-content" id="tab-metrics">
+            <div class="card">
+                <h2>System Metrics</h2>
+                <div id="metrics-container">
+                    <div class="empty-state">
+                        <div class="spinner"></div>
+                        Loading metrics...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Tab -->
+        <div class="tab-content active" id="tab-models">
+            <div class="card">
+                <h2>Loaded Models</h2>
+                <table id="models-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Context</th>
+                            <th>GPU</th>
+                            <th>Temp</th>
+                            <th>Top-P</th>
+                            <th>Min-P</th>
+                            <th>Reason</th>
+                            <th>Flash Attn</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="models-body">
+                        <tr>
+                            <td colspan="10" class="empty-state">
+                                <div class="spinner"></div>
+                                Loading models...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Config Tab -->
+        <div class="tab-content" id="tab-config">
+            <div class="card">
+                <h2>Configuration</h2>
+                <div id="config-container">
+                    <div class="empty-state">
+                        <div class="spinner"></div>
+                        Loading configuration...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Model Tab -->
+        <div class="tab-content" id="tab-add">
+            <div class="card">
+                <h2>📥 Add New Model</h2>
+                <p style="color: #888; margin-bottom: 1.5rem;">Choose a popular model below or enter custom details</p>
+
+                <!-- Quick Select Models -->
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="font-size: 1rem; color: #e0e0e0; margin-bottom: 1rem;">⭐ Popular Models (Click to Download)</h3>
+
+                    <!-- Category Tabs -->
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                        <button class="category-tab active" data-category="all" onclick="filterModels('all')">All</button>
+                        <button class="category-tab" data-category="small" onclick="filterModels('small')">Small (&lt;4GB)</button>
+                        <button class="category-tab" data-category="medium" onclick="filterModels('medium')">Medium (4-8GB)</button>
+                        <button class="category-tab" data-category="large" onclick="filterModels('large')">Large (&gt;8GB)</button>
+                    </div>
+
+                    <div class="quick-models-grid" id="quick-models-grid">
+                        <!-- Models will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Manual Add Form -->
+                <details>
+                    <summary style="cursor: pointer; color: #60a5fa; font-size: 1rem; padding: 0.75rem; background: #1a1a2e; border-radius: 4px; margin-bottom: 1rem;">
+                        🔧 Manual Add (Custom Model URL)
+                    </summary>
+                    <div class="info-box">
+                        <strong>💡 วิธีหา Download URL ง่ายๆ:</strong>
+                        <ul style="margin: 0.5rem 0 0 1.5rem; color: #aaa; font-size: 0.85rem;">
+                            <li><strong>วิธีที่ 1:</strong> ใช้ <strong>Quick Select</strong> ด้านบน - แค่คลิกการ์ดโมเดล!</li>
+                            <li><strong>วิธีที่ 2:</strong> พิมพ์ชื่อไฟล์ (เช่น <code>qwen3-4b-it-Q4_K_M.gguf</code>) ระบบจะหา URL ให้อัตโนมัติ</li>
+                            <li><strong>โมเดลอื่นๆ:</strong> ค้นหาที่ <a href="https://huggingface.co/models?search=gguf" target="_blank" style="color: #60a5fa;">HuggingFace GGUF</a> → คลิก download → copy URL</li>
+                        </ul>
+                    </div>
+                    <form id="add-model-form" style="margin-top: 1rem;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="model-name">Model Name</label>
+                                <input type="text" id="model-name" name="name" required placeholder="e.g., my-custom-model">
+                            </div>
+                            <div class="form-group">
+                                <label for="model-filename">Filename</label>
+                                <input type="text" id="model-filename" name="filename" required placeholder="e.g., model-Q4_K_M.gguf">
+                                <small style="color: #888;">Must end with .gguf</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="model-url">Download URL</label>
+                            <input type="url" id="model-url" name="url" placeholder="https://huggingface.co/..." style="display: none;">
+                            <div id="url-auto-hint" style="background: #1a1a2e; padding: 0.75rem; border-radius: 4px; color: #888; font-size: 0.85rem;">
+                                🔮 <strong>Auto-Detect:</strong> URL จะถูกหาให้อัตโนมัติจากชื่อไฟล์<br>
+                                <small>หรือ <a href="#" onclick="document.getElementById('model-url').style.display='block'; document.getElementById('url-auto-hint').style.display='none'; return false;" style="color: #60a5fa;">คลิกที่นี่</a> เพื่อวาง URL เอง</small>
+                            </div>
+                            <div id="url-preview"></div>
+                        </div>
+
+                        <details style="margin: 1rem 0;">
+                            <summary style="cursor: pointer; color: #f59e0b; font-size: 0.9rem;">
+                                ⚙️ Advanced: HuggingFace Token (only for Meta Llama & gated models)
+                            </summary>
+                            <div class="form-group" style="margin-top: 1rem;">
+                                <label for="hf-token">HuggingFace Token</label>
+                                <input type="password" id="hf-token" name="hf_token" placeholder="hf_...">
+                                <small style="color: #888;">
+                                    Required only for gated models like Meta Llama.
+                                    Get token from <a href="https://huggingface.co/settings/tokens" target="_blank" style="color: #60a5fa;">huggingface.co/settings/tokens</a>.
+                                </small>
+                            </div>
+                        </details>
+
+                        <div class="info-box" style="background: #1a1a2e; border-left: 3px solid #60a5fa; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
+                            <strong>Default settings will be used:</strong>
+                            <ul style="margin: 0.5rem 0 0 1.5rem; color: #aaa; font-size: 0.9rem;">
+                                <li>Context: 8192 | GPU Layers: 99 | Temp: 0.7</li>
+                                <li>Top-P: 0.9 | Min-P: 0.05 | Flash Attention: On</li>
+                            </ul>
+                            <small style="color: #60a5fa;">Edit these in Configuration page after adding</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Download & Add Model</button>
+                    </form>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.dataset.tab;
+
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`tab-${tabId}`).classList.add('active');
+
+                // Load data when switching tabs
+                if (tabId === 'models') loadModels();
+                if (tabId === 'metrics') loadMetrics();
+                if (tabId === 'config') loadConfig();
+                if (tabId === 'downloads') loadDownloads();
+                if (tabId === 'add') loadQuickModels();
+            });
+        });
+
+        // Status check
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                const statusEl = document.getElementById('status');
+                const statusText = document.getElementById('status-text');
+
+                if (data.online) {
+                    statusEl.classList.remove('offline');
+                    statusEl.classList.add('online');
+                    statusText.textContent = 'Online';
+                } else {
+                    statusEl.classList.remove('online');
+                    statusEl.classList.add('offline');
+                    statusText.textContent = 'Offline';
+                }
+
+                return data.online;
+            } catch (error) {
+                console.error('Status check failed:', error);
+                return false;
+            }
+        }
+
+        // ===== Newly Downloaded Models Tracking =====
+        const NEW_MODELS_STORAGE_KEY = 'llama_router_new_models';
+
+        function storeNewlyDownloadedModel(modelName) {
+            const newModels = getNewlyDownloadedModels();
+            if (!newModels.includes(modelName)) {
+                newModels.push(modelName);
+                localStorage.setItem(NEW_MODELS_STORAGE_KEY, JSON.stringify(newModels));
+                console.log('Marked as new:', modelName);
+            }
+        }
+
+        function getNewlyDownloadedModels() {
+            try {
+                const stored = localStorage.getItem(NEW_MODELS_STORAGE_KEY);
+                return stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                console.error('Error reading new models from localStorage:', e);
+                return [];
+            }
+        }
+
+        function removeNewlyDownloadedModel(modelName) {
+            const newModels = getNewlyDownloadedModels();
+            const filtered = newModels.filter(name => name !== modelName);
+            if (filtered.length !== newModels.length) {
+                localStorage.setItem(NEW_MODELS_STORAGE_KEY, JSON.stringify(filtered));
+                console.log('Removed from new models:', modelName);
+            }
+        }
+
+        // Load models
+        async function loadModels() {
+            const tbody = document.getElementById('models-body');
+
+            try {
+                const response = await fetch('/api/models');
+                const models = await response.json();
+
+                if (models.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No models configured</td></tr>';
+                    return;
+                }
+
+                // Get newly downloaded models from localStorage
+                const newModels = getNewlyDownloadedModels();
+
+                tbody.innerHTML = models.map(model => {
+                    const isNew = !model.loaded && newModels.includes(model.name);
+                    const modelNameWithBadge = isNew
+                        ? `${escapeHtml(model.name)} <span class="badge new">New</span>`
+                        : escapeHtml(model.name);
+
+                    return `
+                    <tr>
+                        <td>${modelNameWithBadge}</td>
+                        <td>${model['ctx-size']}</td>
+                        <td>${model['n-gpu-layers']}</td>
+                        <td>${model.temp}</td>
+                        <td>${model['top-p'] || '-'}</td>
+                        <td>${model['min-p'] || '-'}</td>
+                        <td>${model.reasoning === 'on' ? 'On' : 'Off'}</td>
+                        <td>${model.flashAttn === 'true' || model.fa === 'true' ? 'Yes' : 'No'}</td>
+                        <td>
+                            ${(() => {
+                                const status = model.status || 'idle';
+                                let badgeClass = 'unloaded';
+                                let statusText = 'Idle';
+                                if (status === 'loaded') {
+                                    badgeClass = 'loaded';
+                                    statusText = 'Loaded';
+                                } else if (status === 'loading') {
+                                    badgeClass = 'loading';
+                                    statusText = 'Loading...';
+                                } else if (status === 'error') {
+                                    badgeClass = 'error';
+                                    statusText = 'Error';
+                                }
+                                return `<span class="badge ${badgeClass}">${statusText}</span>`;
+                            })()}
+                        </td>
+                        <td>
+                            <div class="actions">
+                                ${(() => {
+                                    const status = model.status || 'idle';
+                                    const isLoaded = status === 'loaded';
+                                    const isLoading = status === 'loading';
+                                    if (isLoading) {
+                                        return `<button class="btn btn-disabled" disabled>Loading...</button>`;
+                                    }
+                                    return isLoaded
+                                        ? `<button class="btn btn-unload" data-action="unload" data-model="${escapeHtml(model.name)}">Unload</button>`
+                                        : `<button class="btn btn-load" data-action="load" data-model="${escapeHtml(model.name)}">Load</button>`;
+                                })()}
+                                <button class="btn btn-remove" data-action="remove" data-model="${escapeHtml(model.name)}">Remove</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                }).join('');
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Failed to load models</td></tr>';
+                showAlert('Failed to load models: ' + error.message, 'error');
+            }
+        }
+
+        // Load config
+        async function loadConfig() {
+            const container = document.getElementById('config-container');
+
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                const sections = Object.entries(config);
+
+                if (sections.length === 0) {
+                    container.innerHTML = '<div class="empty-state">No configuration found</div>';
+                    return;
+                }
+
+                container.innerHTML = sections.map(([name, settings]) => `
+                    <div class="config-section">
+                        <h3>${escapeHtml(name)}</h3>
+                        <p style="color: #888; font-size: 0.85rem; margin-bottom: 1rem;">Model file: ${escapeHtml(settings.model || '')}</p>
+
+                        <div class="form-row">
+                            ${Object.entries(settings).filter(([key]) => key !== 'model').map(([key, value]) => {
+                                // Special handling for different field types
+                                if (key === 'ctx-size') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Context Size</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="512" step="512" placeholder="8192">
+                                        </div>`;
+                                } else if (key === 'n-gpu-layers') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>GPU Layers</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="0" max="999" placeholder="99">
+                                        </div>`;
+                                } else if (key === 'temp') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Temperature</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="0" max="2" step="0.05" placeholder="0.7">
+                                        </div>`;
+                                } else if (key === 'top-p') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Top-P</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="0" max="1" step="0.05" placeholder="0.9">
+                                        </div>`;
+                                } else if (key === 'min-p') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Min-P</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="0" max="1" step="0.01" placeholder="0.05">
+                                        </div>`;
+                                } else if (key === 'reasoning') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Reasoning Mode</label>
+                                            <select data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}">
+                                                <option value="off" ${value === 'off' ? 'selected' : ''}>Off</option>
+                                                <option value="on" ${value === 'on' ? 'selected' : ''}>On</option>
+                                            </select>
+                                        </div>`;
+                                } else if (key === 'flash-attn' || key === 'fa') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Flash Attention</label>
+                                            <select data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}">
+                                                <option value="true" ${value === 'true' ? 'selected' : ''}>On</option>
+                                                <option value="false" ${value === 'false' ? 'selected' : ''}>Off</option>
+                                            </select>
+                                        </div>`;
+                                } else if (key === 'cache-ram') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Cache RAM (bytes)</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="0" step="1" placeholder="0">
+                                        </div>`;
+                                } else if (key === 'np') {
+                                    return `
+                                        <div class="form-group">
+                                            <label>Parallel (np)</label>
+                                            <input type="number" value="${value}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}"
+                                                min="1" max="16" step="1" placeholder="1">
+                                        </div>`;
+                                } else {
+                                    // Default text input for other fields
+                                    return `
+                                        <div class="form-group">
+                                            <label>${escapeHtml(key)}</label>
+                                            <input type="text" value="${escapeHtml(value)}" data-key="${escapeHtml(key)}" data-section="${escapeHtml(name)}">
+                                        </div>`;
+                                }
+                            }).join('')}
+                        </div>
+                        <button class="btn btn-primary" data-action="save-config" data-section="${escapeHtml(name)}">Save Changes</button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state">Failed to load configuration</div>';
+                showAlert('Failed to load config: ' + error.message, 'error');
+            }
+        }
+
+        // Save config section
+        async function saveConfig(section) {
+            const inputs = document.querySelectorAll(`input[data-section="${section}"]`);
+            const selects = document.querySelectorAll(`select[data-section="${section}"]`);
+            const data = {};
+
+            inputs.forEach(input => {
+                const key = input.dataset.key;
+                const value = input.type === 'number' ? parseFloat(input.value) : input.value;
+                data[key] = value;
+            });
+
+            selects.forEach(select => {
+                data[select.dataset.key] = select.value;
+            });
+
+            try {
+                const response = await fetch(`/api/config/${encodeURIComponent(section)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    showAlert('Configuration saved successfully', 'success');
+                    // Refresh models list after config change
+                    setTimeout(() => loadModels(), 2000);
+                } else {
+                    const error = await response.json();
+                    showAlert('Failed to save config: ' + error.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to save config: ' + error.message, 'error');
+            }
+        }
+
+        // Load model
+        async function loadModel(name) {
+            try {
+                const response = await fetch(`/api/models/${encodeURIComponent(name)}/load`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    // Remove from newly downloaded list since user is now loading it
+                    removeNewlyDownloadedModel(name);
+                    showAlert(`Loading model: ${name}`, 'success');
+                    setTimeout(() => loadModels(), 2000);
+                } else {
+                    const error = await response.json();
+                    showAlert('Failed to load model: ' + error.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to load model: ' + error.message, 'error');
+            }
+        }
+
+        // Unload model
+        async function unloadModel(name) {
+            try {
+                const response = await fetch(`/api/models/${encodeURIComponent(name)}/unload`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showAlert(`Unloaded model: ${name}`, 'success');
+                    setTimeout(() => loadModels(), 1000);
+                } else {
+                    const error = await response.json();
+                    showAlert('Failed to unload model: ' + error.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to unload model: ' + error.message, 'error');
+            }
+        }
+
+        // Remove model
+        async function removeModel(name) {
+            if (!confirm(`Are you sure you want to remove "${name}"?\n\nThis will:\n- Unload the model\n- Delete the model file\n- Remove from config\n- Restart the router`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/models/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showAlert(`Removed model: ${name}`, 'success');
+                    setTimeout(() => loadModels(), 1000);
+                } else {
+                    const error = await response.json();
+                    showAlert('Failed to remove model: ' + error.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to remove model: ' + error.message, 'error');
+            }
+        }
+
+        // Add model form
+        document.getElementById('add-model-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            let url = formData.get('url');
+
+            // If URL is empty, try to auto-detect from filename or model name
+            if (!url || !url.trim()) {
+                const filename = formData.get('filename');
+                const name = formData.get('name');
+                const detectedUrl = suggestHuggingFaceUrl(filename || name);
+
+                if (detectedUrl) {
+                    url = detectedUrl;
+                    showAlert(`Auto-detected download URL for ${filename}`, 'success');
+                } else {
+                    showAlert('No download URL provided and could not auto-detect. Please provide a URL.', 'error');
+                    return;
+                }
+            }
+
+            const data = {
+                name: formData.get('name'),
+                url: url,
+                filename: formData.get('filename'),
+                hf_token: formData.get('hf_token'),
+                // Use default settings - can be edited in Configuration page
+                'ctx-size': 8192,
+                'n-gpu-layers': 99,
+                'temp': 0.7,
+                'top-p': 0.9,
+                'min-p': 0.05,
+                'reasoning': 'off',
+                'flash-attn': true,
+                'mmproj': '',
+                'chat-template-file': '',
+                'cache-ram': 0,
+                'np': 1,
+                'port': 8080,
+                'host': '0.0.0.0'
+            };
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Starting...';
+
+            try {
+                // Start download and get download ID
+                const startResponse = await fetch('/api/download/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!startResponse.ok) {
+                    throw new Error('Failed to start download');
+                }
+
+                const { download_id } = await startResponse.json();
+
+                // Show progress modal
+                showDownloadModal(data.name, download_id, () => {
+                    // On complete callback
+                    showAlert(`Model "${data.name}" downloaded and added successfully`, 'success');
+                    e.target.reset();
+                    document.getElementById('url-preview').style.display = 'none';
+                    // Switch to models tab and load models
+                    document.querySelector('.tab[data-tab="models"]').click();
+                    // Wait for llama-router restart and refresh models
+                    setTimeout(() => loadModels(), 2000);
+                    setTimeout(() => loadModels(), 5000);
+                    // Also refresh configuration
+                    setTimeout(() => loadConfig(), 3000);
+                }, () => {
+                    // On error callback
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                });
+
+            } catch (error) {
+                showAlert('Failed to download model: ' + error.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+
+        // Show alert
+        function showAlert(message, type) {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert ${type}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Load metrics
+        async function loadMetrics() {
+            const container = document.getElementById('metrics-container');
+
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+
+                // Calculate totals
+                const totalSize = data.models.total_size_bytes;
+                const totalSizeGB = (totalSize / (1024**3)).toFixed(2);
+
+                // Metrics cards
+                let html = `
+                    <div class="metrics-grid">
+                        <div class="metric-card ${data.server.online ? 'success' : 'error'}">
+                            <div class="metric-label">Server Status</div>
+                            <div class="metric-value">${data.server.online ? 'Online' : 'Offline'}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Loaded Models</div>
+                            <div class="metric-value">${data.models.loaded}<span class="metric-unit"> / ${data.models.available}</span></div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Total Storage</div>
+                            <div class="metric-value">${totalSizeGB}<span class="metric-unit"> GB</span></div>
+                        </div>
+                    </div>
+                `;
+
+                // GPU info
+                if (Object.keys(data.gpu).length > 0) {
+                    html += '<h3 style="color: #888; margin-bottom: 1rem;">GPU Status</h3>';
+                    for (const [gpuId, gpu] of Object.entries(data.gpu)) {
+                        const memPercent = (parseInt(gpu.memory_used) / parseInt(gpu.memory_total)) * 100;
+                        html += `
+                            <div class="gpu-card">
+                                <div class="gpu-header">
+                                    <span class="gpu-name">${gpu.name}</span>
+                                    <span style="color: #888;">${gpu.utilization}</span>
+                                </div>
+                                <div style="font-size: 0.875rem; color: #888;">
+                                    VRAM: ${gpu.memory_used} / ${gpu.memory_total}
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${memPercent}%;"></div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    html += '<div class="empty-state">GPU information not available</div>';
+                }
+
+                // Model details
+                html += '<h3 style="color: #888; margin: 1.5rem 0 1rem;">Model Details</h3>';
+                html += '<table><thead><tr><th>Name</th><th>Size</th><th>Context</th><th>GPU Layers</th><th>Status</th></tr></thead><tbody>';
+                for (const model of data.model_details) {
+                    const sizeMB = (model.size_bytes / (1024**2)).toFixed(0);
+                    html += `
+                        <tr>
+                            <td>${escapeHtml(model.name)}</td>
+                            <td>${sizeMB} MB</td>
+                            <td>${model.ctx_size}</td>
+                            <td>${model.n_gpu_layers}</td>
+                            <td>
+                                <span class="badge ${model.loaded ? 'loaded' : 'unloaded'}">
+                                    ${model.loaded ? 'Loaded' : 'Idle'}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }
+                html += '</tbody></table>';
+
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state">Failed to load metrics</div>';
+                showAlert('Failed to load metrics: ' + error.message, 'error');
+            }
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-fill defaults based on model name/filename
+        function autoFillDefaults() {
+            const name = document.getElementById('model-name').value.trim();
+            const filename = document.getElementById('model-filename').value.trim();
+            const urlInput = document.getElementById('model-url');
+            const urlPreview = document.getElementById('url-preview');
+
+            // Only suggest if URL field is empty
+            if (urlInput.value) return;
+
+            if (filename) {
+                // Try to detect from filename
+                const suggestedUrl = suggestHuggingFaceUrl(filename);
+                if (suggestedUrl) {
+                    urlPreview.textContent = `Will use: ${suggestedUrl}`;
+                    urlPreview.style.display = 'block';
+                } else {
+                    urlPreview.style.display = 'none';
+                }
+            } else if (name) {
+                // Try to detect from model name
+                const suggestedUrl = suggestHuggingFaceUrl(name);
+                if (suggestedUrl) {
+                    urlPreview.textContent = `Will use: ${suggestedUrl}`;
+                    urlPreview.style.display = 'block';
+                } else {
+                    urlPreview.style.display = 'none';
+                }
+            } else {
+                urlPreview.style.display = 'none';
+            }
+        }
+
+        // Suggest HuggingFace URL based on model name/filename
+        function suggestHuggingFaceUrl(input) {
+            const patterns = [
+                // Qwen models
+                { regex: /qwen[-_]?2[-_]?5[-_]?(\d+[\._]?\d*)b[-_].*?([a-z0-9]+[-_][a-z0-9]+[-_]?)?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/Qwen/Qwen2.5-${m[1]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+                { regex: /qwen[-_]?3[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/Qwen/Qwen3-${m[1]}B-GGUF/resolve/main/${m[0]}` },
+                { regex: /qwen[-_]?(\d[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/Qwen/Qwen-${m[1]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+
+                // Gemma models
+                { regex: /gemma[-_]?3[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/google/gemma-3-${m[1]}b-it-GGUF/resolve/main/${m[0]}` },
+                { regex: /gemma[-_]?2[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/google/gemma-2-${m[1]}b-it-GGUF/resolve/main/${m[0]}` },
+
+                // Llama models
+                { regex: /llama[-_]?3[-_]?[\._]?(\d+)[-_](\d+)[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/meta-llama/Llama-3.${m[1]}-${m[2]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+                { regex: /llama[-_]?3[-_]?(\d+)[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/meta-llama/Llama-3.${m[1]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+
+                // SmolLM models
+                { regex: /smollm[-_]?2[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/HuggingFaceTB/SmolLM2-${m[1]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+                { regex: /smollm[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/HuggingFaceTB/SmolLM-${m[1]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+
+                // Phi models
+                { regex: /phi[-_]?(\d+)[-_](\d+)[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/microsoft/Phi-${m[1]}-${m[2]}B-Instruct-GGUF/resolve/main/${m[0]}` },
+                { regex: /phi[-_]?3[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-GGUF/resolve/main/${m[0]}` },
+
+                // Mistral models
+                { regex: /mistral[-_]?(\d+[\._]?\d*)b[-_].*?q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/mistralai/Mistral-${m[1]}B-Instruct-v0.3-GGUF/resolve/main/${m[0]}` },
+
+                // Generic fallback - try common organization patterns
+                { regex: /([a-z0-9]+)[-_](\d+[\._]?\d*)b[-_](.*)q4[_-]?k[_-]?m\.gguf/i,
+                  url: (m) => `https://huggingface.co/${m[1]}/${m[1]}-${m[2]}b-${m[3]}-GGUF/resolve/main/${m[0]}` }
+            ];
+
+            for (const pattern of patterns) {
+                const match = input.match(pattern.regex);
+                if (match) {
+                    return pattern.url(match);
+                }
+            }
+            return null;
+        }
+
+        // Event delegation for all dynamic buttons (prevents XSS)
+        document.addEventListener('click', (e) => {
+            const action = e.target.closest('[data-action]')?.dataset.action;
+            if (!action) return;
+
+            switch (action) {
+                case 'load':
+                    loadModel(e.target.closest('[data-model]').dataset.model);
+                    break;
+                case 'unload':
+                    unloadModel(e.target.closest('[data-model]').dataset.model);
+                    break;
+                case 'remove':
+                    removeModel(e.target.closest('[data-model]').dataset.model);
+                    break;
+                case 'save-config':
+                    saveConfig(e.target.closest('[data-section]').dataset.section);
+                    break;
+            }
+        });
+
+        // Quick models data for Add Model tab
+        // Only models that can be downloaded directly (no gated/auth required)
+        const quickModels = [
+            // Small models (< 4GB)
+            {
+                name: 'SmolLM2 1.7B',
+                filename: 'smollm2-1.7b-instruct-q4_k_m.gguf',
+                url: 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q4_k_m.gguf',
+                provider: 'HuggingFaceTB',
+                size: 'small',
+                sizeGB: '~1GB',
+                gated: false
+            },
+            {
+                name: 'Qwen3 4B',
+                filename: 'Qwen3-4B-Q4_K_M.gguf',
+                url: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
+                provider: 'Qwen',
+                size: 'small',
+                sizeGB: '~2.5GB',
+                gated: false
+            },
+            // Medium models (4-8GB)
+            {
+                name: 'Qwen2.5 7B',
+                filename: 'qwen2.5-7b-instruct-q3_k_m.gguf',
+                url: 'https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q3_k_m.gguf',
+                provider: 'Qwen',
+                size: 'medium',
+                sizeGB: '~3.8GB',
+                gated: false
+            },
+            {
+                name: 'Phi-3.5 Mini',
+                filename: 'phi-3.5-mini-instruct-q4_k_m.gguf',
+                url: 'https://huggingface.co/microsoft/Phi-3.5-mini-instruct-GGUF/resolve/main/phi-3.5-mini-instruct-q4_k_m.gguf',
+                provider: 'Microsoft',
+                size: 'medium',
+                sizeGB: '~2.5GB',
+                gated: false
+            },
+            {
+                name: 'Mistral 7B',
+                filename: 'mistral-7b-instruct-v0.3-q4_k_m.gguf',
+                url: 'https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/mistral-7b-instruct-v0.3-q4_k_m.gguf',
+                provider: 'MistralAI',
+                size: 'medium',
+                sizeGB: '~4.5GB',
+                gated: false
+            },
+            {
+                name: 'DeepSeek R1 7B',
+                filename: 'deepseek-r1-distill-qwen-7b-q4_k_m.gguf',
+                url: 'https://huggingface.co/DeepSeek-Qwen/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/deepseek-r1-distill-qwen-7b-q4_k_m.gguf',
+                provider: 'DeepSeek',
+                size: 'medium',
+                sizeGB: '~5GB',
+                gated: false
+            },
+            // Large models (> 8GB)
+            {
+                name: 'Mistral Nemo 12B',
+                filename: 'mistral-nemo-instruct-2407-q4_k_m.gguf',
+                url: 'https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/mistral-nemo-instruct-2407-q4_k_m.gguf',
+                provider: 'MistralAI',
+                size: 'large',
+                sizeGB: '~8GB',
+                gated: false
+            },
+            {
+                name: 'DeepSeek R1 14B',
+                filename: 'deepseek-r1-distill-qwen-14b-q4_k_m.gguf',
+                url: 'https://huggingface.co/DeepSeek-Qwen/DeepSeek-R1-Distill-Qwen-14B-GGUF/resolve/main/deepseek-r1-distill-qwen-14b-q4_k_m.gguf',
+                provider: 'DeepSeek',
+                size: 'large',
+                sizeGB: '~9GB',
+                gated: false
+            }
+        ];
+
+        // Populate quick models grid
+        function loadQuickModels() {
+            const grid = document.getElementById('quick-models-grid');
+            if (!grid) return;
+
+            // Render all models initially
+            renderQuickModels(quickModels);
+        }
+
+        // Render models to the grid
+        function renderQuickModels(models) {
+            const grid = document.getElementById('quick-models-grid');
+            if (!grid) return;
+
+            if (models.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #888; padding: 2rem;">No models found in this category</div>';
+                return;
+            }
+
+            grid.innerHTML = models.map(model => `
+                <div class="quick-model-card" data-size="${model.size}" data-category="${model.size}"
+                     onclick="downloadQuickModel('${escapeHtml(model.name)}', '${escapeHtml(model.url)}', '${escapeHtml(model.filename)}', ${model.gated})">
+                    <div class="quick-model-header">
+                        <span class="quick-model-name">${escapeHtml(model.name)}</span>
+                        <span class="quick-model-badge ${model.size}">${model.size}</span>
+                    </div>
+                    <div class="quick-model-filename">${escapeHtml(model.filename)}</div>
+                    <div class="quick-model-info">
+                        <span class="quick-model-provider">${escapeHtml(model.provider)}</span>
+                        <span>${model.sizeGB}</span>
+                    </div>
+                    ${model.gated ? '<div class="quick-model-gated" style="margin-top: 0.5rem;">Gated Model</div>' : ''}
+                    <div class="quick-model-download-hint" style="margin-top: 0.75rem; font-size: 0.75rem;">
+                        Click to download
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Filter models by category
+        function filterModels(category) {
+            // Update active tab
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.category === category) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // Filter models
+            const filtered = category === 'all'
+                ? quickModels
+                : quickModels.filter(m => m.size === category);
+
+            renderQuickModels(filtered);
+        }
+
+        // Download a quick model
+        async function downloadQuickModel(name, url, filename, gated) {
+            // Check if gated and prompt for token
+            let hfToken = '';
+
+            if (gated) {
+                hfToken = prompt(`🔒 "${name}" is a gated model.\n\nEnter your HuggingFace Token (leave empty if you have access):\n\nGet your token from: https://huggingface.co/settings/tokens`);
+                if (hfToken === null) {
+                    // User cancelled
+                    return;
+                }
+            }
+
+            const data = {
+                name: name,
+                url: url,
+                filename: filename,
+                hf_token: hfToken || null,
+                // Default settings
+                'ctx-size': 8192,
+                'n-gpu-layers': 99,
+                'temp': 0.7,
+                'top-p': 0.9,
+                'min-p': 0.05,
+                'reasoning': 'off',
+                'flash-attn': true,
+                'mmproj': '',
+                'chat-template-file': '',
+                'cache-ram': 0,
+                'np': 1,
+                'port': 8080,
+                'host': '0.0.0.0'
+            };
+
+            try {
+                showAlert(`Starting download for ${name}...`, 'success');
+
+                // Start download
+                const startResponse = await fetch('/api/download/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!startResponse.ok) {
+                    throw new Error('Failed to start download');
+                }
+
+                const { download_id } = await startResponse.json();
+
+                // Show progress modal
+                showDownloadModal(data.name, download_id, () => {
+                    showAlert(`Model "${name}" downloaded and added successfully`, 'success');
+                    // Switch to models tab
+                    document.querySelector('.tab[data-tab="models"]').click();
+                    setTimeout(() => loadModels(), 2000);
+                    setTimeout(() => loadModels(), 5000);
+                    setTimeout(() => loadConfig(), 3000);
+                }, () => {
+                    showAlert(`Download failed for ${name}`, 'error');
+                });
+
+            } catch (error) {
+                showAlert('Failed to download model: ' + error.message, 'error');
+            }
+        }
+
+        // Show download progress modal
+        function showDownloadModal(modelName, downloadId, onComplete, onError) {
+            // Remove any existing download modal
+            const existingModal = document.querySelector('.download-progress-overlay');
+            if (existingModal) existingModal.remove();
+
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay download-progress-overlay';
+            overlay.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <div class="modal-title">Downloading Model</div>
+                    </div>
+                    <div class="download-progress-container">
+                        <div class="download-model-name">${escapeHtml(modelName)}</div>
+                        <div class="download-status" id="download-status-${downloadId}">
+                            <span class="spinner-inline"></span>
+                            <span id="status-text-${downloadId}">Starting download...</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="progress-bar-${downloadId}" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text-${downloadId}">0%</div>
+                        <div class="progress-details" id="progress-details-${downloadId}">Preparing...</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            // Connect to SSE for progress updates
+            const eventSource = new EventSource(`/api/download/progress/${downloadId}`);
+
+            const statusText = document.getElementById(`status-text-${downloadId}`);
+            const progressBar = document.getElementById(`progress-bar-${downloadId}`);
+            const progressText = document.getElementById(`progress-text-${downloadId}`);
+            const progressDetails = document.getElementById(`progress-details-${downloadId}`);
+            const downloadStatus = document.getElementById(`download-status-${downloadId}`);
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data.replace(/'/g, '"'));
+                    const status = data.status;
+                    const percent = data.percent || 0;
+                    const downloaded = data.downloaded || 0;
+                    const total = data.total || 0;
+
+                    // Update progress bar
+                    progressBar.style.width = percent + '%';
+
+                    // Update status text
+                    if (status === 'starting') {
+                        statusText.textContent = 'Starting download...';
+                        progressDetails.textContent = 'Connecting to server...';
+                    } else if (status === 'downloading') {
+                        progressBar.classList.remove('validating');
+                        statusText.textContent = 'Downloading...';
+                        const downloadedMB = (downloaded / (1024 * 1024)).toFixed(1);
+                        const totalMB = (total / (1024 * 1024)).toFixed(1);
+                        progressText.textContent = percent + '%';
+                        progressDetails.textContent = `${downloadedMB} MB / ${totalMB} MB`;
+                    } else if (status === 'validating') {
+                        progressBar.classList.add('validating');
+                        statusText.textContent = 'Validating file...';
+                        progressText.textContent = '99%';
+                        progressDetails.textContent = 'Checking GGUF format...';
+                    } else if (status === 'complete') {
+                        progressBar.classList.add('complete');
+                        statusText.innerHTML = '✓ Download complete!';
+                        progressText.textContent = '100%';
+                        progressDetails.textContent = 'Model added to config';
+
+                        eventSource.close();
+                        setTimeout(() => {
+                            overlay.remove();
+                            // Store as newly downloaded model
+                            storeNewlyDownloadedModel(modelName);
+                            onComplete();
+                            // Refresh downloads queue to show completed item in history
+                            loadDownloads();
+                        }, 1500);
+                    } else if (status === 'error') {
+                        progressBar.classList.add('error');
+                        statusText.textContent = '✗ Download failed';
+                        progressText.textContent = 'Error';
+                        progressDetails.textContent = data.error || 'Unknown error';
+
+                        eventSource.close();
+                        setTimeout(() => {
+                            overlay.remove();
+                            showAlert('Download failed: ' + (data.error || 'Unknown error'), 'error');
+                            onError();
+                        }, 3000);
+                    } else if (status === 'not_found') {
+                        eventSource.close();
+                        overlay.remove();
+                        showAlert('Download progress not found. Please try again.', 'error');
+                        onError();
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                }
+            };
+
+            eventSource.onerror = function() {
+                eventSource.close();
+                statusText.textContent = 'Connection lost';
+                progressBar.classList.add('error');
+                setTimeout(() => {
+                    overlay.remove();
+                    onError();
+                }, 2000);
+            };
+
+            // Store eventSource on overlay for cleanup
+            overlay._eventSource = eventSource;
+        }
+
+        // Pause download
+        async function pauseDownload(downloadId) {
+            try {
+                const response = await fetch(`/api/download/${downloadId}/pause`, { method: 'POST' });
+                if (response.ok) {
+                    loadDownloads();
+                }
+            } catch (error) {
+                console.error('Failed to pause download:', error);
+            }
+        }
+
+        // Resume download
+        async function resumeDownload(downloadId) {
+            try {
+                const response = await fetch(`/api/download/${downloadId}/resume`, { method: 'POST' });
+                if (response.ok) {
+                    loadDownloads();
+                }
+            } catch (error) {
+                console.error('Failed to resume download:', error);
+            }
+        }
+
+        // Stop download
+        async function stopDownload(downloadId) {
+            if (!confirm('Are you sure you want to stop this download?')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/download/${downloadId}/stop`, { method: 'POST' });
+                if (response.ok) {
+                    loadDownloads();
+                }
+            } catch (error) {
+                console.error('Failed to stop download:', error);
+            }
+        }
+
+        // Delete download (for failed downloads - deletes partial files)
+        async function deleteDownload(downloadId) {
+            try {
+                const response = await fetch(`/api/download/${downloadId}/stop`, { method: 'POST' });
+                if (response.ok) {
+                    loadDownloads();
+                }
+            } catch (error) {
+                console.error('Failed to delete download:', error);
+            }
+        }
+
+        // Clear download (for completed downloads - only removes from queue, preserves model file)
+        async function clearDownload(downloadId) {
+            try {
+                const response = await fetch(`/api/download/${downloadId}/clear`, { method: 'POST' });
+                if (response.ok) {
+                    loadDownloads();
+                }
+            } catch (error) {
+                console.error('Failed to clear download:', error);
+            }
+        }
+
+        // Load downloads queue
+        async function loadDownloads() {
+            const container = document.getElementById('downloads-container');
+
+            try {
+                const response = await fetch('/api/downloads');
+                const downloads = await response.json();
+
+                if (downloads.length === 0) {
+                    container.innerHTML = '<div class="empty-downloads">No downloads in queue</div>';
+                    updateDownloadBadge(0);
+                    return;
+                }
+
+                // Count active downloads
+                const activeCount = downloads.filter(d => d.status === 'starting' || d.status === 'downloading' || d.status === 'validating' || d.status === 'paused').length;
+                updateDownloadBadge(activeCount);
+
+                // Separate active downloads from history (completed/error)
+                const activeDownloads = downloads.filter(d => d.status === 'starting' || d.status === 'downloading' || d.status === 'validating' || d.status === 'paused');
+                const historyDownloads = downloads.filter(d => d.status === 'complete' || d.status === 'error');
+
+                let html = '';
+
+                // Render active downloads
+                for (const download of activeDownloads) {
+                    const status = download.status;
+                    const percent = download.percent || 0;
+                    const downloaded = download.downloaded || 0;
+                    const total = download.total || 0;
+                    const error = download.error;
+                    const name = download.name || 'Unknown';
+                    const filename = download.filename || 'Unknown file';
+                    const downloadId = download.id;
+
+                    let statusText = status;
+                    let statusClass = status;
+
+                    // Format file sizes
+                    let sizeText = '';
+                    if (total > 0) {
+                        const downloadedMB = (downloaded / (1024 * 1024)).toFixed(1);
+                        const totalMB = (total / (1024 * 1024)).toFixed(1);
+                        sizeText = `${downloadedMB} MB / ${totalMB} MB`;
+                    }
+
+                    // Control buttons based on status
+                    let controlButtons = '';
+                    if (status === 'downloading' || status === 'starting') {
+                        controlButtons = `
+                            <div class="download-controls">
+                                <button class="btn btn-pause" onclick="pauseDownload('${downloadId}')">⏸ Pause</button>
+                                <button class="btn btn-stop" onclick="stopDownload('${downloadId}')">⏹ Stop</button>
+                            </div>
+                        `;
+                    } else if (status === 'paused') {
+                        controlButtons = `
+                            <div class="download-controls">
+                                <button class="btn btn-resume" onclick="resumeDownload('${downloadId}')">▶ Resume</button>
+                                <button class="btn btn-stop" onclick="stopDownload('${downloadId}')">⏹ Stop</button>
+                            </div>
+                        `;
+                    } else if (status === 'error') {
+                        controlButtons = `
+                            <div class="download-controls">
+                                <button class="btn btn-stop" onclick="deleteDownload('${downloadId}')">🗑 Delete</button>
+                            </div>
+                        `;
+                    } else if (status === 'complete') {
+                        controlButtons = `
+                            <div class="download-controls">
+                                <button class="btn btn-stop" onclick="clearDownload('${downloadId}')">🗑 Delete from History</button>
+                            </div>
+                        `;
+                    }
+
+                    html += `
+                        <div class="download-item ${statusClass}" data-id="${downloadId}">
+                            <div class="download-item-header">
+                                <span class="download-name">${escapeHtml(name)}</span>
+                                <span class="download-status-badge ${statusClass}">${statusText}</span>
+                            </div>
+                            ${status === 'downloading' || status === 'validating' || status === 'paused' ? `
+                                <div class="download-progress-bar">
+                                    <div class="download-progress-fill ${statusClass}" style="width: ${percent}%"></div>
+                                </div>
+                            ` : ''}
+                            <div class="download-details">
+                                <span>${escapeHtml(filename)}</span>
+                                <span>${sizeText || (percent > 0 ? percent + '%' : '')}</span>
+                            </div>
+                            ${error ? `<div class="download-error">${escapeHtml(error)}</div>` : ''}
+                            ${controlButtons}
+                        </div>
+                    `;
+                }
+
+                // Add history section if there are completed/error downloads
+                if (historyDownloads.length > 0) {
+                    html += `
+                        <div class="download-history-section">
+                            <div class="download-history-header">📚 Download History</div>
+                    `;
+                    for (const download of historyDownloads) {
+                        const status = download.status;
+                        const percent = download.percent || 0;
+                        const downloaded = download.downloaded || 0;
+                        const total = download.total || 0;
+                        const error = download.error;
+                        const name = download.name || 'Unknown';
+                        const filename = download.filename || 'Unknown file';
+                        const downloadId = download.id;
+
+                        let statusText = status;
+                        let statusClass = status;
+
+                        // Format file sizes
+                        let sizeText = '';
+                        if (total > 0) {
+                            const downloadedMB = (downloaded / (1024 * 1024)).toFixed(1);
+                            const totalMB = (total / (1024 * 1024)).toFixed(1);
+                            sizeText = `${downloadedMB} MB / ${totalMB} MB`;
+                        } else if (downloaded > 0) {
+                            const downloadedMB = (downloaded / (1024 * 1024)).toFixed(1);
+                            sizeText = `${downloadedMB} MB`;
+                        }
+
+                        // Control buttons based on status
+                        let controlButtons = '';
+                        if (status === 'error') {
+                            controlButtons = `
+                                <div class="download-controls">
+                                    <button class="btn btn-stop" onclick="deleteDownload('${downloadId}')">🗑 Delete</button>
+                                </div>
+                            `;
+                        } else if (status === 'complete') {
+                            controlButtons = `
+                                <div class="download-controls">
+                                    <button class="btn btn-stop" onclick="clearDownload('${downloadId}')">🗑 Delete from History</button>
+                                </div>
+                            `;
+                        }
+
+                        html += `
+                            <div class="download-item ${statusClass}" data-id="${downloadId}">
+                                <div class="download-item-header">
+                                    <span class="download-name">${escapeHtml(name)}</span>
+                                    <span class="download-status-badge ${statusClass}">${statusText}</span>
+                                </div>
+                                <div class="download-details">
+                                    <span>${escapeHtml(filename)}</span>
+                                    <span>${sizeText || (percent > 0 ? percent + '%' : '')}</span>
+                                </div>
+                                ${error ? `<div class="download-error">${escapeHtml(error)}</div>` : ''}
+                                ${controlButtons}
+                            </div>
+                        `;
+                    }
+                    html += `</div>`;
+                }
+
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = '<div class="empty-downloads">Failed to load downloads</div>';
+                console.error('Failed to load downloads:', error);
+            }
+        }
+
+        // Update download badge count
+        function updateDownloadBadge(count) {
+            const badge = document.getElementById('download-badge');
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        // Auto-refresh downloads every 2 seconds
+        let downloadsInterval = setInterval(() => {
+            // Only refresh if downloads tab is active
+            if (document.querySelector('.tab[data-tab="downloads"]').classList.contains('active')) {
+                loadDownloads();
+            }
+        }, 2000);
+
+        // Auto-refresh models when tab is active (for restart detection)
+        let modelsInterval = setInterval(() => {
+            // Only refresh if models tab is active
+            if (document.querySelector('.tab[data-tab="models"]').classList.contains('active')) {
+                loadModels();
+            }
+        }, 5000);
+
+        // Initial load
+        checkStatus();
+        loadModels();
+        loadDownloads(); // Load initial downloads state
+        setInterval(checkStatus, 10000); // Check status every 10s
+    </script>
+</body>
+</html>

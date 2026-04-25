@@ -2,7 +2,7 @@
 # Model management commands for llama-router
 # Usage: ./models.sh [list|load|unload|status]
 
-HOST="http://localhost:8080"
+HOST="http://localhost:8581"
 
 cmd="${1:-list}"
 model="$2"
