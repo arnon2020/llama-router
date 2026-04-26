@@ -14,6 +14,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, jsonify, request, render_template, Response, stream_with_context
 from urllib.parse import urlparse
 from pathlib import Path
+import lifecycle as lifecycle_mod
 from datetime import datetime
 from typing import Tuple, Optional
 import threading
@@ -22,6 +23,9 @@ import json
 import time
 
 app = Flask(__name__)
+
+# Initialize lifecycle management
+lifecycle_mod.init()
 
 # Persistent download progress tracking
 DOWNLOADS_FILE = '/data/downloads.json'
@@ -226,13 +230,25 @@ def get_loaded_models():
     return {}
 
 def read_config():
-    """Parse config.ini and return as dict"""
+    """Parse config.ini and return as dict, deduplicated by model path"""
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
 
     models = {}
+    seen_paths = set()  # Track model paths to avoid duplicates
+
     for section in config.sections():
-        models[section] = dict(config.items(section))
+        settings = dict(config.items(section))
+        model_path = settings.get('model', '')
+
+        if model_path:
+            # Deduplicate: skip if we've seen this path before
+            if model_path in seen_paths:
+                app.logger.warning(f"Duplicate model path in config: {section} -> {model_path} (skipping)")
+                continue
+            seen_paths.add(model_path)
+
+        models[section] = settings
 
     return models
 
@@ -267,7 +283,28 @@ def favicon():
 @app.route('/')
 def index():
     """Serve main UI"""
-    return render_template('index.html')
+    return render_template('base.html')
+
+
+@app.route('/chat')
+def chat_page():
+    return render_template('base.html')
+
+@app.route('/models')
+def models_page():
+    return render_template('base.html')
+
+@app.route('/profiles')
+def profiles_page():
+    return render_template('base.html')
+
+@app.route('/downloads')
+def downloads_page():
+    return render_template('base.html')
+
+@app.route('/settings')
+def settings_page():
+    return render_template('base.html')
 
 @app.route('/api/status')
 def status():
@@ -277,6 +314,67 @@ def status():
         'online': online,
         'host': active_host
     })
+
+def format_size(size_bytes):
+    """Format bytes to human readable size"""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f} PB"
+
+def parse_model_info(name):
+    """Parse model name to extract organization (by) and quantization type (quant)"""
+    # Default values
+    by = 'Unknown'
+    quant = '-'
+
+    # Try to extract from common patterns like "org-model-quant" or "model-quant"
+    name_lower = name.lower()
+
+    # Check for known quantization patterns
+    quant_patterns = [
+        'q8_0', 'q8', 'q7_k', 'q6_k', 'q5_k_m', 'q5_k_l', 'q5_k_s', 'q5_0', 'q5_1',
+        'q4_k_m', 'q4_k_l', 'q4_k_s', 'q4_0', 'q4_1', 'q4', 'q3_k_m', 'q3_k_l', 'q3_k_s',
+        'q2_k', 'q2_k_s', 'q2_k_l', 'iq2_xxs', 'iq2_xs', 'iq2_s', 'iq3_xxs', 'iq3_s',
+        'iq4_nl', 'iq4_xs', 'f32', 'f16', 'bf16'
+    ]
+
+    for pattern in quant_patterns:
+        if pattern in name_lower:
+            # Format quantization type nicely (e.g., q4_k_m -> Q4_K_M)
+            quant = pattern.upper().replace('_', '-')
+            break
+
+    # Try to extract organization from patterns like:
+    # "smollm2-1.7b-instruct-q4_k_m" -> by = "HuggingFace" (default)
+    # "qwen3-4b-it-q4_k_m" -> by = "Qwen"
+    # "unsloth-qwen3-4b" -> by = "Unsloth"
+
+    org_keywords = {
+        'unsloth': 'Unsloth',
+        'qwen': 'Qwen',
+        'llama': 'Meta',
+        'smollm': 'HuggingFace',
+        'mistral': 'Mistral AI',
+        'mixtral': 'Mistral AI',
+        'gemma': 'Google',
+        'phi': 'Microsoft',
+        'deepseek': 'DeepSeek',
+        'internlm': 'InternLM',
+        'yi': '01.AI',
+        'codegemma': 'Google',
+        'replit': 'Replit',
+        'stablelm': 'Stability AI',
+    }
+
+    for keyword, org in org_keywords.items():
+        if keyword in name_lower:
+            by = org
+            break
+
+    return by, quant
+
 
 @app.route('/api/models')
 def list_models():
@@ -289,14 +387,36 @@ def list_models():
     result = []
     for name, settings in config_models.items():
         status = model_statuses.get(name, 'idle')  # Get actual status or 'idle'
+
+        # Get file stats
+        model_path = settings.get('model', '')
+        size = '-'
+        created = '-'
+
+        if model_path.startswith('/models/'):
+            full_path = os.path.join(MODELS_DIR, os.path.basename(model_path))
+            if os.path.exists(full_path):
+                stat_info = os.stat(full_path)
+                size = format_size(stat_info.st_size)
+                # Format created date
+                created = datetime.fromtimestamp(stat_info.st_ctime).strftime('%Y-%m-%d %H:%M')
+
+        # Parse model info
+        by, quant = parse_model_info(name)
+
         result.append({
             'name': name,
             'model': settings.get('model', ''),
+            'status': status,  # New field with actual status value
+            'size': size,
+            'created': created,
+            'by': by,
+            'quant': quant,
+            # Keep backward compatibility for existing code
             'ctx-size': settings.get('ctx-size', ''),
             'n-gpu-layers': settings.get('n-gpu-layers', ''),
             'temp': settings.get('temp', ''),
-            'loaded': status == 'loaded',  # Keep backward compatibility
-            'status': status,  # New field with actual status value
+            'loaded': status == 'loaded',
             'top-p': settings.get('top-p', ''),
             'min-p': settings.get('min-p', ''),
             'reasoning': settings.get('reasoning', 'off'),
@@ -441,9 +561,13 @@ def update_config_section(section):
 
     data = request.get_json()
 
-    # Update provided fields
+    # Metadata fields that should not be written to llama.cpp config
+    metadata_fields = {'description', 'name'}
+
+    # Update provided fields, excluding metadata
     for key, value in data.items():
-        config_models[section][key] = value
+        if key not in metadata_fields:
+            config_models[section][key] = value
 
     write_config(config_models)
 
@@ -1200,6 +1324,847 @@ def health():
     """Health check endpoint"""
     online, _ = get_llama_status()
     return jsonify({'status': 'healthy' if online else 'degraded'}), 200 if online else 503
+
+# ==============================================================================
+# PROFILE MANAGEMENT ENDPOINTS
+# ==============================================================================
+
+PROFILES_PATH = '/config/profiles.ini'
+
+def read_profiles():
+    """Read profiles from profiles.ini"""
+    config = configparser.ConfigParser()
+    config.read(PROFILES_PATH)
+
+    profiles = {}
+    for section in config.sections():
+        profiles[section] = dict(config.items(section))
+    return profiles
+
+def write_profiles(profiles):
+    """Write profiles to profiles.ini"""
+    config = configparser.ConfigParser()
+
+    for name, settings in profiles.items():
+        config.add_section(name)
+        for key, value in settings.items():
+            config.set(name, key, str(value))
+
+    with open(PROFILES_PATH, 'w') as f:
+        config.write(f)
+
+@app.route('/api/profiles')
+def list_profiles():
+    """Get all profiles"""
+    profiles = read_profiles()
+    # Get list of available models
+    config_models = read_config()
+
+    result = []
+    for name, settings in profiles.items():
+        result.append({
+            'name': name,
+            'model': settings.get('model', ''),
+            'description': settings.get('description', ''),
+            'settings': settings
+        })
+
+    return jsonify({
+        'profiles': result,
+        'available_models': list(config_models.keys())
+    })
+
+@app.route('/api/profiles/<name>', methods=['POST'])
+def create_profile(name):
+    """Create a new profile"""
+    profiles = read_profiles()
+
+    if name in profiles:
+        return jsonify({'error': 'Profile already exists'}), 400
+
+    data = request.get_json()
+
+    # Validate required fields
+    if not data.get('model'):
+        return jsonify({'error': 'Model is required'}), 400
+
+    # Flatten: model + description + settings.* into one flat dict
+    flat = {}
+    flat['model'] = data.get('model', '')
+    flat['description'] = data.get('description', '')
+    settings = data.get('settings', {})
+    if isinstance(settings, dict):
+        flat.update(settings)
+    profiles[name] = flat
+    write_profiles(profiles)
+
+    return jsonify({'success': True, 'name': name})
+
+@app.route('/api/profiles/<name>', methods=['PUT'])
+def update_profile(name):
+    """Update an existing profile"""
+    profiles = read_profiles()
+
+    if name not in profiles:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    data = request.get_json()
+
+    # Update fields (flatten settings sub-dict if present)
+    for key, value in data.items():
+        if key == 'settings' and isinstance(value, dict):
+            for sk, sv in value.items():
+                profiles[name][sk] = sv
+        else:
+            profiles[name][key] = value
+
+    write_profiles(profiles)
+
+    return jsonify({'success': True, 'name': name})
+
+@app.route('/api/profiles/<name>', methods=['DELETE'])
+def delete_profile(name):
+    """Delete a profile"""
+    profiles = read_profiles()
+
+    if name not in profiles:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    del profiles[name]
+    write_profiles(profiles)
+
+    return jsonify({'success': True})
+
+@app.route('/api/profiles/schema')
+def get_profile_schema():
+    """Get the complete schema of available llama.cpp parameters with defaults"""
+    schema = {
+        # Required - marked with *
+        "required": ["model"],
+
+        # Important - marked with *
+        "important": [
+            "model", "ctx-size", "n-gpu-layers", "temp", "top-p",
+            "top-k", "reasoning", "flash-attn"
+        ],
+
+        # Parameters by category
+        "parameters": {
+            # Basic/Required
+            "model": {
+                "type": "select",
+                "default": "",
+                "required": True,
+                "important": True,
+                "description": "Model name (from config)",
+                "options": []  # Populated dynamically
+            },
+            "description": {
+                "type": "text",
+                "default": "",
+                "required": False,
+                "description": "Profile description"
+            },
+
+            # Context & Memory
+            "ctx-size": {
+                "type": "number",
+                "default": 8192,
+                "min": 512,
+                "step": 512,
+                "important": True,
+                "description": "Size of the prompt context"
+            },
+            "n-predict": {
+                "type": "number",
+                "default": -1,
+                "description": "Number of tokens to predict (-1 = infinity)"
+            },
+            "cache-ram": {
+                "type": "number",
+                "default": 0,
+                "description": "Max cache size in MiB (-1=unlimited, 0=disable)"
+            },
+            "batch-size": {
+                "type": "number",
+                "default": 2048,
+                "description": "Logical maximum batch size"
+            },
+            "ubatch-size": {
+                "type": "number",
+                "default": 512,
+                "description": "Physical maximum batch size"
+            },
+
+            # GPU
+            "n-gpu-layers": {
+                "type": "text",
+                "default": "auto",
+                "important": True,
+                "description": "Max layers in VRAM (auto/all/number)"
+            },
+            "split-mode": {
+                "type": "select",
+                "default": "layer",
+                "options": ["none", "layer", "row", "tensor"],
+                "description": "How to split model across GPUs"
+            },
+            "tensor-split": {
+                "type": "text",
+                "default": "",
+                "description": "Fraction of model per GPU (e.g., '3,1')"
+            },
+            "main-gpu": {
+                "type": "number",
+                "default": 0,
+                "description": "GPU to use for model"
+            },
+            "cache-type-k": {
+                "type": "select",
+                "default": "f16",
+                "options": ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"],
+                "description": "KV cache data type for K"
+            },
+            "cache-type-v": {
+                "type": "select",
+                "default": "f16",
+                "options": ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"],
+                "description": "KV cache data type for V"
+            },
+            "kv-offload": {
+                "type": "select",
+                "default": "true",
+                "options": ["true", "false"],
+                "description": "Enable KV cache offloading"
+            },
+
+            # CPU
+            "threads": {
+                "type": "number",
+                "default": -1,
+                "description": "Number of CPU threads (-1 = auto)"
+            },
+            "threads-batch": {
+                "type": "number",
+                "default": -1,
+                "description": "Threads for batch processing"
+            },
+            "mlock": {
+                "type": "select",
+                "default": "false",
+                "options": ["true", "false"],
+                "description": "Force model to stay in RAM"
+            },
+            "mmap": {
+                "type": "select",
+                "default": "true",
+                "options": ["true", "false"],
+                "description": "Memory-map model"
+            },
+
+            # Sampling - Core
+            "temp": {
+                "type": "number",
+                "default": 0.7,
+                "min": 0,
+                "max": 2,
+                "step": 0.05,
+                "important": True,
+                "description": "Sampling temperature"
+            },
+            "top-p": {
+                "type": "number",
+                "default": 0.9,
+                "min": 0,
+                "max": 1,
+                "step": 0.05,
+                "important": True,
+                "description": "Top-p sampling (nucleus)"
+            },
+            "min-p": {
+                "type": "number",
+                "default": 0.05,
+                "min": 0,
+                "max": 1,
+                "step": 0.01,
+                "description": "Min-p sampling"
+            },
+            "top-k": {
+                "type": "number",
+                "default": 40,
+                "min": 0,
+                "important": True,
+                "description": "Top-k sampling (0 = disabled)"
+            },
+
+            # Sampling - Repetition
+            "repeat-last-n": {
+                "type": "number",
+                "default": 64,
+                "min": -1,
+                "description": "Last n tokens to penalize (0=off, -1=ctx_size)"
+            },
+            "repeat-penalty": {
+                "type": "number",
+                "default": 1.0,
+                "min": 0,
+                "step": 0.05,
+                "description": "Penalize repeat sequence (1.0 = off)"
+            },
+            "presence-penalty": {
+                "type": "number",
+                "default": 0.0,
+                "min": 0,
+                "step": 0.05,
+                "description": "Repeat alpha presence penalty"
+            },
+            "frequency-penalty": {
+                "type": "number",
+                "default": 0.0,
+                "min": 0,
+                "step": 0.05,
+                "description": "Repeat alpha frequency penalty"
+            },
+
+            # Sampling - Advanced
+            "typical": {
+                "type": "number",
+                "default": 1.0,
+                "min": 0,
+                "max": 1,
+                "step": 0.05,
+                "description": "Locally typical sampling (1.0 = off)"
+            },
+            "dynatemp-range": {
+                "type": "number",
+                "default": 0.0,
+                "min": 0,
+                "step": 0.1,
+                "description": "Dynamic temperature range (0 = off)"
+            },
+            "dynatemp-exp": {
+                "type": "number",
+                "default": 1.0,
+                "step": 0.1,
+                "description": "Dynamic temperature exponent"
+            },
+            "mirostat": {
+                "type": "select",
+                "default": "0",
+                "options": ["0", "1", "2"],
+                "description": "Mirostat sampling (0=off, 1=Mirostat, 2=Mirostat 2.0)"
+            },
+            "mirostat-lr": {
+                "type": "number",
+                "default": 0.1,
+                "step": 0.01,
+                "description": "Mirostat learning rate"
+            },
+            "mirostat-ent": {
+                "type": "number",
+                "default": 5.0,
+                "step": 0.1,
+                "description": "Mirostat target entropy"
+            },
+            "seed": {
+                "type": "number",
+                "default": -1,
+                "description": "RNG seed (-1 = random)"
+            },
+
+            # DRY Sampling
+            "dry-multiplier": {
+                "type": "number",
+                "default": 0.0,
+                "min": 0,
+                "step": 0.05,
+                "description": "DRY sampling multiplier (0 = off)"
+            },
+            "dry-base": {
+                "type": "number",
+                "default": 1.75,
+                "step": 0.05,
+                "description": "DRY sampling base value"
+            },
+            "dry-allowed-length": {
+                "type": "number",
+                "default": 2,
+                "min": 0,
+                "description": "Allowed length for DRY sampling"
+            },
+            "dry-penalty-last-n": {
+                "type": "number",
+                "default": -1,
+                "min": -1,
+                "description": "DRY penalty for last n tokens"
+            },
+            "dry-sequence-breaker": {
+                "type": "text",
+                "default": "",
+                "description": "DRY sequence breaker (comma-separated)"
+            },
+
+            # XTC
+            "xtc-probability": {
+                "type": "number",
+                "default": 0.0,
+                "min": 0,
+                "max": 1,
+                "step": 0.05,
+                "description": "XTC probability (0 = off)"
+            },
+            "xtc-threshold": {
+                "type": "number",
+                "default": 0.1,
+                "min": 0,
+                "max": 1,
+                "step": 0.01,
+                "description": "XTC threshold"
+            },
+
+            # Adaptive
+            "adaptive-target": {
+                "type": "number",
+                "default": -1.0,
+                "min": -1,
+                "max": 1,
+                "step": 0.05,
+                "description": "Adaptive-p target probability (-1 = off)"
+            },
+            "adaptive-decay": {
+                "type": "number",
+                "default": 0.9,
+                "min": 0,
+                "max": 0.99,
+                "step": 0.01,
+                "description": "Adaptive-p decay rate"
+            },
+
+            # RoPE Scaling
+            "rope-scaling": {
+                "type": "select",
+                "default": "linear",
+                "options": ["none", "linear", "yarn"],
+                "description": "RoPE frequency scaling method"
+            },
+            "rope-scale": {
+                "type": "number",
+                "default": 1.0,
+                "min": 0,
+                "step": 0.1,
+                "description": "RoPE context scaling factor"
+            },
+            "rope-freq-base": {
+                "type": "number",
+                "default": 0,
+                "min": 0,
+                "step": 100,
+                "description": "RoPE base frequency (0 = from model)"
+            },
+            "rope-freq-scale": {
+                "type": "number",
+                "default": 1.0,
+                "min": 0,
+                "step": 0.1,
+                "description": "RoPE frequency scaling factor"
+            },
+
+            # Reasoning
+            "reasoning": {
+                "type": "select",
+                "default": "off",
+                "options": ["on", "off", "auto"],
+                "important": True,
+                "description": "Use reasoning/thinking mode"
+            },
+            "reasoning-budget": {
+                "type": "number",
+                "default": -1,
+                "min": -1,
+                "description": "Token budget for thinking (-1=unlimited, 0=immediate)"
+            },
+            "reasoning-format": {
+                "type": "select",
+                "default": "auto",
+                "options": ["auto", "none", "deepseek", "deepseek-legacy"],
+                "description": "Format for thoughts"
+            },
+
+            # Flash Attention
+            "flash-attn": {
+                "type": "select",
+                "default": "auto",
+                "options": ["on", "off", "auto"],
+                "important": True,
+                "description": "Flash Attention mode"
+            },
+
+            # Chat Template
+            "chat-template": {
+                "type": "select",
+                "default": "",
+                "options": [
+                    "", "llama2", "llama3", "llama4", "chatml", "alpaca",
+                    "deepseek", "deepseek2", "deepseek3", "qwen2", "phi3",
+                    "mistral", "gemma", "vicuna", "command-r", "zephyr"
+                ],
+                "description": "Built-in chat template"
+            },
+            "chat-template-file": {
+                "type": "text",
+                "default": "",
+                "description": "Custom chat template file path"
+            },
+
+            # Server
+            "host": {
+                "type": "text",
+                "default": "0.0.0.0",
+                "description": "IP address to listen"
+            },
+            "port": {
+                "type": "number",
+                "default": 8080,
+                "min": 1024,
+                "max": 65535,
+                "description": "Port to listen"
+            },
+            "np": {
+                "type": "number",
+                "default": 1,
+                "min": 1,
+                "max": 16,
+                "description": "Number of server slots (parallel)"
+            },
+            "timeout": {
+                "type": "number",
+                "default": 600,
+                "min": 10,
+                "description": "Server timeout in seconds"
+            },
+
+            # Multimodal
+            "mmproj": {
+                "type": "text",
+                "default": "",
+                "description": "Multimodal projector file path"
+            },
+            "mmproj-offload": {
+                "type": "select",
+                "default": "true",
+                "options": ["true", "false"],
+                "description": "GPU offload for multimodal projector"
+            },
+
+            # Grammar/JSON
+            "grammar": {
+                "type": "text",
+                "default": "",
+                "description": "BNF-like grammar to constrain generations"
+            },
+            "grammar-file": {
+                "type": "text",
+                "default": "",
+                "description": "Grammar file path"
+            },
+            "json-schema": {
+                "type": "text",
+                "default": "",
+                "description": "JSON schema to constrain generations"
+            }
+        },
+
+        # Categories for organizing the UI
+        "categories": {
+            "basic": {
+                "name": "Basic Settings",
+                "description": "Essential configuration options",
+                "fields": ["model", "description", "ctx-size", "n-gpu-layers", "temp", "top-p", "top-k", "flash-attn", "reasoning"]
+            },
+            "sampling": {
+                "name": "Sampling Parameters",
+                "description": "Control text generation behavior",
+                "fields": ["temp", "top-p", "top-k", "min-p", "typical", "seed"]
+            },
+            "repetition": {
+                "name": "Repetition Control",
+                "description": "Reduce repetitive output",
+                "fields": ["repeat-last-n", "repeat-penalty", "presence-penalty", "frequency-penalty"]
+            },
+            "advanced_sampling": {
+                "name": "Advanced Sampling",
+                "description": "Expert sampling options",
+                "fields": ["dynatemp-range", "dynatemp-exp", "mirostat", "mirostat-lr", "mirostat-ent"]
+            },
+            "dry": {
+                "name": "DRY Sampling",
+                "description": "Deduplicated Repetition Detection",
+                "fields": ["dry-multiplier", "dry-base", "dry-allowed-length", "dry-penalty-last-n", "dry-sequence-breaker"]
+            },
+            "xtc": {
+                "name": "XTC Sampling",
+                "description": "Explicit Token Cancellation",
+                "fields": ["xtc-probability", "xtc-threshold"]
+            },
+            "adaptive": {
+                "name": "Adaptive Sampling",
+                "description": "Adaptive probability targeting",
+                "fields": ["adaptive-target", "adaptive-decay"]
+            },
+            "rope": {
+                "name": "RoPE Scaling",
+                "description": "Context extension settings",
+                "fields": ["rope-scaling", "rope-scale", "rope-freq-base", "rope-freq-scale"]
+            },
+            "memory": {
+                "name": "Memory & Cache",
+                "description": "Memory management options",
+                "fields": ["cache-ram", "batch-size", "ubatch-size", "n-predict"]
+            },
+            "gpu": {
+                "name": "GPU Settings",
+                "description": "GPU configuration",
+                "fields": ["split-mode", "tensor-split", "main-gpu", "cache-type-k", "cache-type-v", "kv-offload"]
+            },
+            "cpu": {
+                "name": "CPU Settings",
+                "description": "CPU thread configuration",
+                "fields": ["threads", "threads-batch", "mlock", "mmap"]
+            },
+            "reasoning_opts": {
+                "name": "Reasoning Options",
+                "description": "Thinking/reasoning mode settings",
+                "fields": ["reasoning", "reasoning-budget", "reasoning-format"]
+            },
+            "chat": {
+                "name": "Chat Template",
+                "description": "Conversation formatting",
+                "fields": ["chat-template", "chat-template-file"]
+            },
+            "server": {
+                "name": "Server Settings",
+                "description": "Network and server options",
+                "fields": ["host", "port", "np", "timeout"]
+            },
+            "multimodal": {
+                "name": "Multimodal",
+                "description": "Vision/image support",
+                "fields": ["mmproj", "mmproj-offload"]
+            },
+            "constraints": {
+                "name": "Output Constraints",
+                "description": "Grammar and JSON schema",
+                "fields": ["grammar", "grammar-file", "json-schema"]
+            }
+        },
+
+        # Preset profiles
+        "presets": {
+            "fast": {
+                "name": "Fast",
+                "description": "Quick responses, lower quality",
+                "settings": {
+                    "ctx-size": 4096,
+                    "temp": 0.3,
+                    "top-p": 0.8,
+                    "top-k": 20,
+                    "repeat-penalty": 1.0,
+                    "flash-attn": "on"
+                }
+            },
+            "balanced": {
+                "name": "Balanced",
+                "description": "Good balance of speed and quality",
+                "settings": {
+                    "ctx-size": 8192,
+                    "temp": 0.7,
+                    "top-p": 0.9,
+                    "min-p": 0.05,
+                    "flash-attn": "auto"
+                }
+            },
+            "creative": {
+                "name": "Creative",
+                "description": "More diverse and creative outputs",
+                "settings": {
+                    "ctx-size": 8192,
+                    "temp": 1.2,
+                    "top-p": 0.95,
+                    "min-p": 0.1,
+                    "repeat-penalty": 1.0,
+                    "presence-penalty": 0.1
+                }
+            },
+            "reasoning": {
+                "name": "Reasoning",
+                "description": "Extended thinking for complex tasks",
+                "settings": {
+                    "ctx-size": 16384,
+                    "temp": 0.7,
+                    "top-p": 0.9,
+                    "reasoning": "on",
+                    "flash-attn": "on"
+                }
+            },
+            "precise": {
+                "name": "Precise",
+                "description": "Focused, deterministic outputs",
+                "settings": {
+                    "ctx-size": 8192,
+                    "temp": 0.1,
+                    "top-p": 0.5,
+                    "top-k": 10,
+                    "repeat-penalty": 1.1
+                }
+            }
+        }
+    }
+
+    # Populate available models dynamically
+    config_models = read_config()
+    schema["parameters"]["model"]["options"] = list(config_models.keys())
+
+    return jsonify(schema)
+
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Chat completion endpoint with streaming support"""
+    # Check if llama-server is online
+    online, host = get_llama_status()
+    if not online:
+        return jsonify({'error': 'Server offline'}), 503
+    
+    # Get request data
+    data = request.get_json()
+    model = data.get('model')
+    messages = data.get('messages', [])
+    stream = data.get('stream', True)
+    
+    if not model:
+        return jsonify({'error': 'Model name is required'}), 400
+    
+    if not messages:
+        return jsonify({'error': 'Messages are required'}), 400
+    
+    # Touch lifecycle - model is being used
+    lifecycle_mod.touch(model)
+    
+    # Prepare request to llama.cpp API
+    llama_request = {
+        'model': model,
+        'messages': messages,
+        'stream': stream,
+        'temperature': float(data.get('temperature', 0.7)),
+        'top_p': float(data.get('top_p', 0.9)),
+        'max_tokens': int(data.get('max_tokens', -1)) if data.get('max_tokens') else -1
+    }
+    
+    # Optional parameters
+    if 'top_k' in data:
+        llama_request['top_k'] = int(data['top_k'])
+    if 'min_p' in data:
+        llama_request['min_p'] = float(data['min_p'])
+    if 'repeat_penalty' in data:
+        llama_request['repeat_penalty'] = float(data['repeat_penalty'])
+    if 'presence_penalty' in data:
+        llama_request['presence_penalty'] = float(data['presence_penalty'])
+    if 'frequency_penalty' in data:
+        llama_request['frequency_penalty'] = float(data['frequency_penalty'])
+    
+    app.logger.info(f"Chat request: model={model}, messages={len(messages)}, stream={stream}")
+    
+    try:
+        # Forward request to llama.cpp API with streaming
+        response = requests.post(
+            f'{host}/v1/chat/completions',
+            json=llama_request,
+            stream=True,
+            timeout=(10, 300)  # 10s connect, 300s read
+        )
+        
+        if response.status_code != 200:
+            error_text = response.text[:500]
+            app.logger.error(f"Llama.cpp API error: {response.status_code} - {error_text}")
+            return jsonify({'error': f'Generation failed: {response.status_code}'}), response.status_code
+        
+        # Stream the response
+        def generate():
+            try:
+                for line in response.iter_lines():
+                    if line:
+                        # Forward the SSE line directly to client
+                        yield line.decode('utf-8') + '\n'
+            except GeneratorExit:
+                # Client disconnected
+                app.logger.info("Chat stream disconnected by client")
+                response.close()
+            except Exception as e:
+                app.logger.error(f"Error streaming response: {e}")
+                yield f"data: {{'error': '{str(e)}'}}\n\n"
+        
+        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+        
+    except requests.Timeout:
+        app.logger.error("Chat request timeout")
+        return jsonify({'error': 'Request timeout'}), 504
+    except requests.RequestException as e:
+        app.logger.error(f"Chat request error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/page/<page>')
+def serve_page(page):
+    """Serve page content fragments for AJAX navigation"""
+    valid_pages = ['dashboard', 'chat', 'models', 'profiles', 'downloads', 'settings']
+    if page not in valid_pages:
+        return 'Page not found', 404
+    try:
+        return render_template(f'pages/{page}.html')
+    except:
+        return 'Page not found', 404
+
+
+# ==============================================================================
+# LIFECYCLE MANAGEMENT ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/lifecycle')
+def get_lifecycle():
+    """Get lifecycle status for all models"""
+    loaded = get_loaded_models()
+    status = lifecycle_mod.get_all_status(loaded)
+    return jsonify(status)
+
+@app.route('/api/lifecycle/<name>', methods=['PUT'])
+def update_lifecycle(name):
+    """Update lifecycle settings for a model"""
+    data = request.get_json()
+    result = lifecycle_mod.update_settings(
+        name,
+        pin=data.get('pin'),
+        preload=data.get('preload'),
+        keep_alive=data.get('keep_alive')
+    )
+    return jsonify({'success': True, 'settings': result})
+
+@app.route('/api/lifecycle/<name>/evict', methods=['POST'])
+def evict_model(name):
+    """Manually trigger LRU eviction for a specific model"""
+    online, host = get_llama_status()
+    if not online:
+        return jsonify({'error': 'Server offline'}), 503
+    
+    try:
+        response = requests.post(
+            f'{host}/models/unload',
+            json={'model': name},
+            timeout=30
+        )
+        return jsonify(response.json()), response.status_code
+    except requests.RequestException as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # For Docker containers, 0.0.0.0 is required for external access

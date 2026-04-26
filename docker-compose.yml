@@ -53,11 +53,12 @@ services:
     ports:
       - "${WEB_UI_PORT:-8580}:3000"
     volumes:
-      - ./config.ini:/config/config.ini
+      - ./config:/config
       - ./models:/models
       # SECURITY WARNING: Mounting Docker socket gives container full control over host Docker.
       # Only mount if absolutely necessary. Consider using Docker API proxy with restricted permissions.
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
     environment:
       - LLAMA_HOST=http://llama-router:8080
       - CONFIG_PATH=/config/config.ini

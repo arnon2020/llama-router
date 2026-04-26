@@ -12,3 +12,19 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Python
+__pycache__/
+*.pyc
+
+# Config with local data
+config/profiles.ini
+data/
+
+# Backups
+*.backup
+
+# Agent/IDE
+.claude/
+.claude-flow/
+.oracle-v2/

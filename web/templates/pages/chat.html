@@ -1,0 +1,66 @@
+<!-- Chat Page -->
+<div class="chat-page">
+    <!-- Chat Header -->
+    <div class="chat-header">
+        <div class="chat-header-content">
+            <div class="chat-title">
+                <h2>Chat</h2>
+                <span class="model-selector" id="current-model">No model selected</span>
+            </div>
+            <div class="chat-controls">
+                <button class="btn btn-icon" id="clear-chat" title="Clear chat">
+                    🗑️
+                </button>
+                <button class="btn btn-icon" id="chat-settings" title="Chat settings">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Messages -->
+    <div class="chat-container" id="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <div class="empty-chat">
+                <div class="empty-chat-icon">💬</div>
+                <h3>Start a conversation</h3>
+                <p>Select a model from the Models tab to begin chatting</p>
+                <button class="btn btn-primary" id="go-to-models">
+                    Go to Models
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Input -->
+    <div class="chat-input-container">
+        <div class="model-select-wrapper" id="model-select-wrapper">
+            <select id="chat-model-select" class="chat-model-select">
+                <option value="">Select a model...</option>
+            </select>
+        </div>
+        <div class="chat-input-wrapper">
+            <textarea 
+                id="chat-input" 
+                class="chat-input" 
+                placeholder="Type your message... (Shift+Enter for new line)"
+                rows="1"
+            ></textarea>
+            <div class="chat-input-actions">
+                <button class="btn btn-icon" id="stop-generation" title="Stop generation" style="display: none;">
+                    ⏹️
+                </button>
+                <button class="btn btn-send" id="send-message" title="Send message">
+                    <span>Send</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="chat-info">
+            <span class="token-count" id="token-count">0 tokens</span>
+            <span class="generation-speed" id="generation-speed"></span>
+        </div>
+    </div>
+</div>

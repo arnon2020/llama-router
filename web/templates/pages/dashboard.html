@@ -1,0 +1,125 @@
+<!-- Dashboard Page -->
+<div class="dashboard">
+    <!-- Quick Stats -->
+    <div class="metrics-grid" id="dashboard-stats">
+        <div class="metric-card" id="dash-status">
+            <div class="metric-label">Server Status</div>
+            <div class="metric-value" id="dash-status-value">Checking...</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Loaded Models</div>
+            <div class="metric-value" id="dash-loaded-count">-<span class="metric-unit"> / -</span></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">GPU VRAM</div>
+            <div class="metric-value" id="dash-vram">-<span class="metric-unit"> %</span></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Total Storage</div>
+            <div class="metric-value" id="dash-storage">-<span class="metric-unit"> GB</span></div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+        <h2>Quick Actions</h2>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <a href="/chat" class="btn btn-primary" style="text-decoration: none;">Start Chat</a>
+            <a href="/models" class="btn btn-load" style="text-decoration: none;">Manage Models</a>
+            <a href="/downloads" class="btn btn-unload" style="text-decoration: none;">Download Model</a>
+        </div>
+    </div>
+
+    <!-- Active Models -->
+    <div class="card">
+        <h2>Active Models</h2>
+        <div id="dashboard-models">
+            <div class="empty-state">
+                <div class="spinner"></div>
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <!-- GPU Status -->
+    <div class="card">
+        <h2>GPU Status</h2>
+        <div id="dashboard-gpu">
+            <div class="empty-state">
+                <div class="spinner"></div>
+                Loading GPU info...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Dashboard-specific initialization
+async function loadDashboard() {
+    try {
+        // Load metrics for stats
+        const metricsResp = await fetch('/api/metrics');
+        const metrics = await metricsResp.json();
+
+        // Update stats
+        const statusCard = document.getElementById('dash-status');
+        const statusValue = document.getElementById('dash-status-value');
+        statusValue.textContent = metrics.server.online ? 'Online' : 'Offline';
+        statusCard.classList.add(metrics.server.online ? 'success' : 'error');
+
+        document.getElementById('dash-loaded-count').innerHTML =
+            `${metrics.models.loaded}<span class="metric-unit"> / ${metrics.models.available}</span>`;
+        
+        const totalGB = (metrics.models.total_size_bytes / (1024**3)).toFixed(2);
+        document.getElementById('dash-storage').innerHTML =
+            `${totalGB}<span class="metric-unit"> GB</span>`;
+
+        // GPU info
+        const gpuContainer = document.getElementById('dashboard-gpu');
+        if (Object.keys(metrics.gpu).length > 0) {
+            let gpuHtml = '';
+            for (const [gpuId, gpu] of Object.entries(metrics.gpu)) {
+                const memPercent = (parseInt(gpu.memory_used) / parseInt(gpu.memory_total)) * 100;
+                gpuHtml += `
+                    <div class="gpu-card">
+                        <div class="gpu-header">
+                            <span class="gpu-name">${gpu.name}</span>
+                            <span style="color: #888;">${gpu.utilization}</span>
+                        </div>
+                        <div style="font-size: 0.875rem; color: #888;">
+                            VRAM: ${gpu.memory_used} / ${gpu.memory_total}
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${memPercent}%;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            gpuContainer.innerHTML = gpuHtml;
+            document.getElementById('dash-vram').innerHTML =
+                `${Object.values(metrics.gpu).map(g => ((parseInt(g.memory_used)/parseInt(g.memory_total))*100).toFixed(0)).join(', ')}<span class="metric-unit"> %</span>`;
+        } else {
+            gpuContainer.innerHTML = '<div class="empty-state">GPU information not available</div>';
+        }
+
+        // Active models
+        const modelsResp = await fetch('/api/models');
+        const models = await modelsResp.json();
+        const modelsContainer = document.getElementById('dashboard-models');
+        const loadedModels = models.filter(m => m.status === 'loaded');
+
+        if (loadedModels.length === 0) {
+            modelsContainer.innerHTML = '<div class="empty-state">No models currently loaded. <a href="/models" style="color: #60a5fa;">Load a model</a> to get started.</div>';
+        } else {
+            modelsContainer.innerHTML = `<table><thead><tr><th>Model</th><th>Status</th></tr></thead><tbody>
+                ${loadedModels.map(m => `<tr><td>${m.name}</td><td><span class="badge running">RUNNING</span></td></tr>`).join('')}
+            </tbody></table>`;
+        }
+    } catch (error) {
+        console.error('Dashboard load error:', error);
+    }
+}
+
+// Auto-run dashboard load
+loadDashboard();
+</script>

@@ -1,0 +1,60 @@
+<!-- Settings Page -->
+<div class="settings-page">
+    <!-- System Metrics -->
+    <div class="card">
+        <h2>System Metrics</h2>
+        <div id="metrics-container">
+            <div class="empty-state">
+                <div class="spinner"></div>
+                Loading metrics...
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Model -->
+    <div class="card">
+        <h2>Add New Model</h2>
+        <p class="card-description">Choose a popular model below or enter custom details</p>
+
+        <!-- Quick Select Models -->
+        <div class="quick-models-section">
+            <h3>Popular Models (Click to Download)</h3>
+
+            <!-- Category Tabs -->
+            <div class="category-tabs" id="category-tabs">
+                <button class="category-tab active" data-category="all">All</button>
+                <button class="category-tab" data-category="small">Small</button>
+                <button class="category-tab" data-category="medium">Medium</button>
+                <button class="category-tab" data-category="large">Large</button>
+            </div>
+
+            <!-- Models Grid -->
+            <div class="quick-models-grid" id="quick-models-grid">
+                <div class="empty-state">Loading models...</div>
+            </div>
+        </div>
+
+        <!-- Custom Download Form -->
+        <div class="custom-download-section">
+            <h3>Custom Download</h3>
+            <form id="custom-download-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="custom-name">Model Name *</label>
+                        <input type="text" id="custom-name" placeholder="e.g., My Custom Model" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="custom-filename">Filename *</label>
+                        <input type="text" id="custom-filename" placeholder="model.gguf" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="custom-url">Download URL *</label>
+                    <input type="url" id="custom-url" placeholder="https://huggingface.co/..." required>
+                </div>
+                <div id="url-preview"></div>
+                <button type="submit" class="btn btn-primary">Download Model</button>
+            </form>
+        </div>
+    </div>
+</div>

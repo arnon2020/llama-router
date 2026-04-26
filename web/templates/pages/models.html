@@ -1,0 +1,33 @@
+<!-- Models Page -->
+<div class="card">
+    <div class="models-header">
+        <h2>Models</h2>
+        <div class="models-controls">
+            <input type="text" id="models-search" placeholder="Search models..." class="search-input">
+            <select id="models-filter-by" class="filter-select">
+                <option value="">All By</option>
+            </select>
+        </div>
+    </div>
+    <table id="models-table">
+        <thead>
+            <tr>
+                <th>Model</th>
+                <th>By</th>
+                <th>Quant</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Size</th>
+                <th>Remove</th>
+            </tr>
+        </thead>
+        <tbody id="models-body">
+            <tr>
+                <td colspan="7" class="empty-state">
+                    <div class="spinner"></div>
+                    Loading models...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
