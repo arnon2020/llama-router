@@ -80,50 +80,159 @@ Create profiles via **Profiles page** or API.
 
 ## API Endpoints
 
+### Health & Status
+
+```bash
+# Health check
+curl http://localhost:8580/health
+
+# Server status
+curl http://localhost:8580/api/status
+
+# System metrics + GPU stats
+curl http://localhost:8580/api/metrics
+```
+
 ### Model Management
+
+```bash
+# List all models (available + loaded)
+curl http://localhost:8580/api/models
+
+# Load a model
+curl -X POST http://localhost:8580/api/models/SmolLM2%201.7B/load
+
+# Unload a model (free VRAM)
+curl -X POST http://localhost:8580/api/models/SmolLM2%201.7B/unload
+
+# Remove a model from config
+curl -X DELETE http://localhost:8580/api/models/SmolLM2%201.7B
+```
+
+### Lifecycle
+
+```bash
+# Get lifecycle status for all models
+curl http://localhost:8580/api/lifecycle
+
+# Set lifecycle for a model (pin + preload + 30min keep-alive)
+curl -X PUT http://localhost:8580/api/lifecycle/SmolLM2%201.7B \
+  -H "Content-Type: application/json" \
+  -d '{"pin": true, "preload": true, "keep_alive": 30}'
+
+# Evict a model immediately
+curl -X POST http://localhost:8580/api/lifecycle/SmolLM2%201.7B/evict
+```
+
+### Profiles
+
+```bash
+# List all profiles
+curl http://localhost:8580/api/profiles
+
+# Create a profile
+curl -X POST http://localhost:8580/api/profiles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Fast Chat",
+    "model": "SmolLM2 1.7B",
+    "pin": true,
+    "preload": true,
+    "keep_alive": 30,
+    "settings": {
+      "ctx-size": 8192,
+      "temp": 0.7,
+      "top-p": 0.9,
+      "flash-attn": true
+    }
+  }'
+
+# Update a profile
+curl -X PUT http://localhost:8580/api/profiles/Fast%20Chat \
+  -H "Content-Type: application/json" \
+  -d '{"temp": 0.5, "keep_alive": 60}'
+
+# Load model from profile (applies settings + lifecycle)
+curl -X POST http://localhost:8580/api/profiles/Fast%20Chat/load
+
+# Delete a profile
+curl -X DELETE http://localhost:8580/api/profiles/Fast%20Chat
+```
+
+### Configuration
+
+```bash
+# Get full config
+curl http://localhost:8580/api/config
+
+# Update a config section
+curl -X PUT http://localhost:8580/api/config/my-model \
+  -H "Content-Type: application/json" \
+  -d '{"temp": 0.8, "ctx-size": 4096}'
+```
+
+### Downloads
+
+```bash
+# Download a model from HuggingFace
+curl -X POST http://localhost:8580/api/download \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf"}'
+```
+
+### Chat (OpenAI-compatible)
+
+```bash
+# Chat completion (port 8581)
+curl http://localhost:8581/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "SmolLM2 1.7B",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Hello!"}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 512
+  }'
+
+# Streaming response
+curl http://localhost:8581/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "SmolLM2 1.7B",
+    "messages": [{"role": "user", "content": "Tell me a story"}],
+    "stream": true
+  }'
+
+# List available models (OpenAI-compatible)
+curl http://localhost:8581/v1/models
+```
+
+### Endpoint Reference
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/status` | GET | Server status |
+| `/api/metrics` | GET | System metrics & GPU stats |
 | `/api/models` | GET | List all models |
 | `/api/models/<name>/load` | POST | Load a model |
 | `/api/models/<name>/unload` | POST | Unload a model |
 | `/api/models/<name>` | DELETE | Remove a model |
-
-### Lifecycle
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/lifecycle` | GET | Get lifecycle status for all models |
-| `/api/lifecycle/<name>` | PUT | Set lifecycle settings (pin, preload, keep_alive) |
-
-### Profiles
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
+| `/api/lifecycle` | GET | Lifecycle status for all models |
+| `/api/lifecycle/<name>` | PUT | Set lifecycle settings |
+| `/api/lifecycle/<name>/evict` | POST | Evict a model |
 | `/api/profiles` | GET | List all profiles |
 | `/api/profiles` | POST | Create a profile |
 | `/api/profiles/<name>` | PUT | Update a profile |
 | `/api/profiles/<name>` | DELETE | Delete a profile |
 | `/api/profiles/<name>/load` | POST | Load model from profile |
-
-### Other
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/status` | GET | Server status |
 | `/api/config` | GET | Get full config |
 | `/api/config/<section>` | PUT | Update config section |
 | `/api/download` | POST | Download new model |
-| `/api/metrics` | GET | System metrics & GPU stats |
-| `/health` | GET | Health check |
-
-### Chat (OpenAI-compatible)
-
-```bash
-curl http://localhost:8581/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "SmolLM2 1.7B", "messages": [{"role": "user", "content": "hello"}]}'
-```
+| `/v1/chat/completions` | POST | Chat completion (port 8581) |
+| `/v1/models` | GET | List models, OpenAI format (port 8581) |
 
 ## Makefile Commands
 
