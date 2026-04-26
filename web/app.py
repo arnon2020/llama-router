@@ -310,9 +310,14 @@ def settings_page():
 def status():
     """Get server status"""
     online, active_host = get_llama_status()
+    loaded = get_loaded_models()
+    # Bug 4 fix: include models_loaded field
+    loaded_list = [name for name, s in loaded.items() if s == 'loaded']
     return jsonify({
         'online': online,
-        'host': active_host
+        'host': active_host,
+        'models_loaded': len(loaded_list),
+        'models_loaded_list': loaded_list
     })
 
 def format_size(size_bytes):
@@ -1353,7 +1358,7 @@ def write_profiles(profiles):
     with open(PROFILES_PATH, 'w') as f:
         config.write(f)
 
-@app.route('/api/profiles')
+@app.route('/api/profiles', methods=['GET', 'POST'])
 def list_profiles():
     """Get all profiles"""
     profiles = read_profiles()
@@ -1368,6 +1373,34 @@ def list_profiles():
             'description': settings.get('description', ''),
             'settings': settings
         })
+
+    if request.method == 'POST':
+        # Bug 1 fix: POST /api/profiles — create profile without URL param
+        data = request.get_json()
+        name = data.get('name')
+        if not name:
+            return jsonify({'error': 'Profile name is required'}), 400
+        if not data.get('model'):
+            return jsonify({'error': 'Model is required'}), 400
+        if name in profiles:
+            return jsonify({'error': 'Profile already exists'}), 400
+
+        # Bug 5 fix: capture top-level lifecycle fields before flattening
+        flat = {}
+        flat['model'] = data.get('model', '')
+        flat['description'] = data.get('description', '')
+        # Lifecycle fields from top-level
+        for lf in ['pin', 'preload', 'keep_alive']:
+            if lf in data:
+                flat[lf] = str(data[lf])
+        # Settings sub-dict
+        settings = data.get('settings', {})
+        if isinstance(settings, dict):
+            for sk, sv in settings.items():
+                flat[sk] = sv
+        profiles[name] = flat
+        write_profiles(profiles)
+        return jsonify({'success': True, 'name': name}), 201
 
     return jsonify({
         'profiles': result,
@@ -1388,10 +1421,14 @@ def create_profile(name):
     if not data.get('model'):
         return jsonify({'error': 'Model is required'}), 400
 
-    # Flatten: model + description + settings.* into one flat dict
+    # Flatten: model + description + lifecycle + settings.* into one flat dict
     flat = {}
     flat['model'] = data.get('model', '')
     flat['description'] = data.get('description', '')
+    # Bug 5 fix: capture top-level lifecycle fields
+    for lf in ['pin', 'preload', 'keep_alive']:
+        if lf in data:
+            flat[lf] = str(data[lf])
     settings = data.get('settings', {})
     if isinstance(settings, dict):
         flat.update(settings)
@@ -1434,6 +1471,59 @@ def delete_profile(name):
     write_profiles(profiles)
 
     return jsonify({'success': True})
+
+
+
+@app.route('/api/profiles/<name>/load', methods=['POST'])
+def load_profile(name):
+    """Load a model using profile settings"""
+    profiles = read_profiles()
+    if name not in profiles:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    profile = profiles[name]
+    model_name = profile.get('model', '')
+    if not model_name:
+        return jsonify({'error': 'Profile has no model configured'}), 400
+
+    online, host = get_llama_status()
+    if not online:
+        return jsonify({'error': 'Server offline'}), 503
+
+    # Load the model via llama-server
+    # If model already loaded, just update lifecycle settings
+    loaded = get_loaded_models()
+    already_loaded = loaded.get(model_name) == 'loaded'
+
+    if not already_loaded:
+        try:
+            response = requests.post(
+                f'{host}/models/load',
+                json={'model': model_name},
+                timeout=60
+            )
+            if response.status_code != 200:
+                try:
+                    return jsonify(response.json()), response.status_code
+                except:
+                    return jsonify({'error': f'Load failed: {response.status_code}'}), response.status_code
+        except requests.RequestException as e:
+            return jsonify({'error': str(e)}), 500
+
+    # Apply lifecycle settings from profile
+    pin_val = profile.get('pin', 'false')
+    preload_val = profile.get('preload', 'false')
+    keep_alive_val = profile.get('keep_alive', None)
+
+    lifecycle_mod.update_settings(
+        model_name,
+        pin=str(pin_val).lower() == 'true' if pin_val is not None else None,
+        preload=str(preload_val).lower() == 'true' if preload_val is not None else None,
+        keep_alive=int(keep_alive_val) if keep_alive_val is not None else None
+    )
+    lifecycle_mod.touch(model_name)
+
+    return jsonify({'success': True, 'model': model_name, 'already_loaded': already_loaded})
 
 @app.route('/api/profiles/schema')
 def get_profile_schema():
@@ -2136,9 +2226,21 @@ def get_lifecycle():
     status = lifecycle_mod.get_all_status(loaded)
     return jsonify(status)
 
-@app.route('/api/lifecycle/<name>', methods=['PUT'])
+@app.route('/api/lifecycle/<name>', methods=['GET', 'PUT'])
 def update_lifecycle(name):
-    """Update lifecycle settings for a model"""
+    """Get or update lifecycle settings for a model"""
+    if request.method == 'GET':
+        # Bug 3 fix: GET single model lifecycle status
+        loaded = get_loaded_models()
+        status = lifecycle_mod.get_all_status(loaded)
+        if name in status:
+            return jsonify(status[name])
+        # Check if model exists in config at all
+        config_models = read_config()
+        if name in config_models or name in loaded:
+            return jsonify(lifecycle_mod.get_settings(name))
+        return jsonify({'error': f'Model "{name}" not found'}), 404
+
     data = request.get_json()
     result = lifecycle_mod.update_settings(
         name,
@@ -2151,6 +2253,11 @@ def update_lifecycle(name):
 @app.route('/api/lifecycle/<name>/evict', methods=['POST'])
 def evict_model(name):
     """Manually trigger LRU eviction for a specific model"""
+    # Bug 6 fix: check pin status before eviction
+    settings = lifecycle_mod.get_settings(name)
+    if settings.get('pin', False):
+        return jsonify({'error': f'Model "{name}" is pinned and cannot be evicted'}), 403
+
     online, host = get_llama_status()
     if not online:
         return jsonify({'error': 'Server offline'}), 503
